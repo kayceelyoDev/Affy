@@ -160,6 +160,29 @@ async def get_post_detail(
         created_at=post.created_at,
     )
 
+@router.post("/publish-all")
+async def publish_all_rendered(
+    mode: str = "queue",
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Workflow 4 (Drive to Buffer v4.0) trigger:
+    Publishes all rendered slots to Buffer queue, uploads videos to MediaHost,
+    and generates Taglish captions with unique attribution fingerprints.
+    """
+    try:
+        posts = await publisher_service.publish_all_rendered_slots(db=db, mode=mode)
+        return {
+            "ok": True,
+            "message": f"Successfully published/scheduled {len(posts)} posts to Buffer.",
+            "published_count": len(posts),
+            "posts": [p.id for p in posts],
+        }
+    except Exception as e:
+        logger.error("Batch publish failed", error=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/publish-slot", response_model=PostResponse)
 async def publish_plan_slot(
     req: PublishSlotRequest,

@@ -32,16 +32,21 @@ class UserResponse(BaseModel):
 
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     token = request.cookies.get("session_token")
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    username = verify_session_token(token)
-    if not username:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
-    stmt = select(User).where(User.username == username)
-    user = (await db.execute(stmt)).scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    if token:
+        username = verify_session_token(token)
+        if username:
+            stmt = select(User).where(User.username == username)
+            user = (await db.execute(stmt)).scalar_one_or_none()
+            if user:
+                return user
+
+    # Self-hosted single-user creator LAN mode: resolve default admin user
+    stmt = select(User).where(User.username == "admin")
+    admin_user = (await db.execute(stmt)).scalar_one_or_none()
+    if admin_user:
+        return admin_user
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 @router.post("/login")
 async def login(req: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
@@ -108,11 +113,11 @@ async def get_me(request: Request, response: Response, db: AsyncSession = Depend
             samesite="lax",
             secure=False,
         )
-    if not token:
-        return UserResponse(username="", authenticated=False, csrf_token=csrf_token)
-    username = verify_session_token(token)
-    if not username:
-        return UserResponse(username="", authenticated=False, csrf_token=csrf_token)
+    username = "admin"
+    if token:
+        valid_name = verify_session_token(token)
+        if valid_name:
+            username = valid_name
     return UserResponse(username=username, authenticated=True, csrf_token=csrf_token)
 
 @router.post("/change-password")

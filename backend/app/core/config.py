@@ -13,7 +13,14 @@ class Settings(BaseSettings):
     # Server & Network
     HOST: str = "0.0.0.0"
     PORT: int = 8090
-    CORS_ORIGINS: list[str] = ["http://localhost:8090", "http://127.0.0.1:8090", "http://localhost:8091", "http://127.0.0.1:8091"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:8090",
+        "http://127.0.0.1:8090",
+        "http://localhost:8091",
+        "http://127.0.0.1:8091",
+        "http://192.168.1.7:8090",
+        "http://192.168.1.7:8091",
+    ]
     
     # Paths
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent

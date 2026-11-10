@@ -88,6 +88,20 @@ class DailyPlannerService:
                 "score": score,
             })
 
+        # Fallback: if no products have >= 4 clips, allocate any active products with available clips or active flag
+        if not eligible_products and all_products:
+            for prod in all_products:
+                clips_stmt = select(func.count(Clip.id)).where(
+                    and_(Clip.product_id == prod.id, Clip.status == "usable")
+                )
+                clip_count = (await db.execute(clips_stmt)).scalar() or 0
+                eligible_products.append({
+                    "product": prod,
+                    "clip_count": clip_count,
+                    "tier": "TEST",
+                    "score": 1.0,
+                })
+
         # Sort eligible products by score descending
         eligible_products.sort(key=lambda x: x["score"], reverse=True)
 

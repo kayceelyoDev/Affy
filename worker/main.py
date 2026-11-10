@@ -48,9 +48,20 @@ class RenderWorker:
             # Fallback check relative path or directly under data/clips
             clip_paths = [Path(c.file_path) for c in clips if Path(c.file_path).exists()]
 
-        if len(clip_paths) < 2:
+        # If DB didn't have paths, search the product folder in storage
+        if not clip_paths:
+            clips_dir = settings.DATA_DIR / "clips"
+            found_vids = [p for p in clips_dir.rglob("*.mp4") if p.is_file()] + [p for p in clips_dir.rglob("*.mov") if p.is_file()]
+            if found_vids:
+                clip_paths = found_vids[:6]
+
+        if len(clip_paths) == 1:
+            # Duplicate single clip so beat cut planner can alternate segments smoothly
+            clip_paths = [clip_paths[0], clip_paths[0]]
+
+        if len(clip_paths) < 1:
             job.status = "failed"
-            job.error_message = f"Product has only {len(clip_paths)} accessible usable clips (minimum 2 required)"
+            job.error_message = f"Product has no accessible video clips in storage."
             await db.commit()
             return
 
@@ -62,10 +73,14 @@ class RenderWorker:
         if track and Path(track.storage_path).exists():
             music_path = Path(track.storage_path)
         else:
-            # Check legacy music or default
-            legacy_music = list(Path("legacy_private/video-editor/music").glob("*.mp3"))
-            if legacy_music:
-                music_path = legacy_music[0]
+            # Check data/music or legacy music
+            data_music = list((settings.DATA_DIR / "music").glob("*.mp3")) + list(Path("data/music").glob("*.mp3"))
+            if data_music:
+                music_path = data_music[0]
+            else:
+                legacy_music = list(Path("legacy_private/video-editor/music").glob("*.mp3"))
+                if legacy_music:
+                    music_path = legacy_music[0]
 
         if not music_path:
             job.status = "failed"
@@ -99,12 +114,30 @@ class RenderWorker:
             job.completed_at = datetime.utcnow()
             job.log_tail = f"Render succeeded in {render_info.get('attempts', 1)} attempts. Duration: {job.duration}s."
             
-            # If linked to a plan slot, update slot
+            # If linked to a plan slot, update slot and create/link Post
             if job.plan_slot_id:
                 slot = await db.get(PlanSlot, job.plan_slot_id)
                 if slot:
                     slot.status = "rendered"
                     slot.render_id = job.id
+
+                    from backend.app.models.models import Post
+                    post_stmt = select(Post).where(Post.render_id == job.id)
+                    existing_post = (await db.execute(post_stmt)).scalar_one_or_none()
+                    if not existing_post:
+                        new_post = Post(
+                            product_id=job.product_id,
+                            render_id=job.id,
+                            caption=f"{job.title} - {job.subtitle}",
+                            hook_style=job.subtitle,
+                            style_id=job.style_id,
+                            media_url=str(out_path),
+                            mode="queue",
+                            status="ready_to_post",
+                        )
+                        db.add(new_post)
+                        await db.flush()
+                        slot.post_id = new_post.id
 
             await db.commit()
             logger.info("render_job_completed", job_id=job.id, duration=job.duration, out_path=str(out_path))

@@ -6,6 +6,9 @@ import {
   CheckCircle2,
   Sparkles,
   RefreshCw,
+  Film,
+  Send,
+  AlertCircle,
 } from "lucide-react";
 import { Button, Card, Badge } from "../components/ui";
 import { api } from "../api/client";
@@ -39,13 +42,15 @@ export const PlannerPage: React.FC = () => {
   const [dryRunMode, setDryRunMode] = useState(false);
   const [autoApproveMode, setAutoApproveMode] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [actionMsg, setActionMsg] = useState<{ text: string; error?: boolean } | null>(null);
 
   const fetchTodayPlan = async () => {
     try {
       const data = await api.get<PlanResponse>("/api/planner/today");
       setPlan(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch daily plan", err);
     }
   };
@@ -65,15 +70,48 @@ export const PlannerPage: React.FC = () => {
       });
 
       setPlan(data);
-      setActionMsg(
-        dryRunMode
+      setActionMsg({
+        text: dryRunMode
           ? "Dry-run plan generated successfully (nothing saved or rendered)."
-          : "Today's plan generated and saved with Sunday Strategy allocations."
-      );
+          : "Today's plan generated and saved with Sunday Strategy allocations.",
+      });
     } catch (err: any) {
-      setActionMsg(`Error: ${err.message}`);
+      setActionMsg({ text: `Error: ${err.message}`, error: true });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleRunAutoEdit = async (slotId?: number) => {
+    setEditing(true);
+    setActionMsg(null);
+    try {
+      const res = await api.post("/api/renders/auto-edit", slotId ? { slot_id: slotId } : {});
+      setActionMsg({ text: res.message || "FFmpeg auto-edit jobs queued successfully." });
+      await fetchTodayPlan();
+    } catch (err: any) {
+      setActionMsg({ text: `Auto-edit error: ${err.message}`, error: true });
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handlePublishAll = async (slotId?: number) => {
+    setPublishing(true);
+    setActionMsg(null);
+    try {
+      if (slotId) {
+        await api.post("/api/posts/publish-slot", { slot_id: slotId, mode: "queue" });
+        setActionMsg({ text: `Slot #${slotId} scheduled to Buffer queue.` });
+      } else {
+        const res = await api.post("/api/posts/publish-all", { mode: "queue" });
+        setActionMsg({ text: res.message || "All rendered videos scheduled to Buffer queue." });
+      }
+      await fetchTodayPlan();
+    } catch (err: any) {
+      setActionMsg({ text: `Publish error: ${err.message}`, error: true });
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -89,10 +127,10 @@ export const PlannerPage: React.FC = () => {
   const handleApproveAll = async () => {
     try {
       await api.post("/api/planner/approve");
-      setActionMsg("All slots approved for rendering and Buffer publication.");
+      setActionMsg({ text: "All slots approved for rendering and Buffer publication." });
       fetchTodayPlan();
-    } catch (err) {
-      console.error("Failed to approve all slots", err);
+    } catch (err: any) {
+      setActionMsg({ text: `Approval failed: ${err.message}`, error: true });
     }
   };
 
@@ -103,19 +141,43 @@ export const PlannerPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Calendar className="w-6 h-6 text-neutral-400" />
-            Today's Daily Plan ({plan?.date ?? "Loading..."})
+            Today's Strategy Content Plan ({plan?.date ?? "Loading..."})
           </h1>
           <p className="text-sm text-neutral-500">
-            6 Strategy Quota slots planned from Sunday Engine scorecards, clip readiness, and exploration shares.
+            Replaces Workflow 2 (Strategy Engine) & triggers Workflow 3 (Auto-Edit FFmpeg) and Workflow 4 (Buffer Poster).
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={fetchTodayPlan}>
-            <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
           </Button>
-          <Button size="sm" disabled={generating} onClick={handleGeneratePlan}>
-            <Sparkles className="w-4 h-4 mr-1.5" /> {generating ? "Generating..." : "Generate Plan Now"}
+
+          <Button size="sm" variant="secondary" disabled={generating} onClick={handleGeneratePlan}>
+            <Sparkles className={`w-3.5 h-3.5 mr-1.5 ${generating ? 'animate-spin' : ''}`} />
+            {generating ? "Generating..." : "Generate Plan"}
+          </Button>
+
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={editing}
+            onClick={() => handleRunAutoEdit()}
+            className="bg-neutral-900 text-white dark:bg-white dark:text-black"
+          >
+            <Film className={`w-3.5 h-3.5 mr-1.5 ${editing ? 'animate-spin' : ''}`} />
+            Run Auto-Edit All
+          </Button>
+
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={publishing}
+            onClick={() => handlePublishAll()}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <Send className={`w-3.5 h-3.5 mr-1.5 ${publishing ? 'animate-spin' : ''}`} />
+            Publish All to Buffer
           </Button>
         </div>
       </div>
@@ -131,7 +193,7 @@ export const PlannerPage: React.FC = () => {
               className="rounded border-neutral-300 dark:border-neutral-700"
             />
             <span className="font-medium text-neutral-800 dark:text-neutral-200">
-              Auto-Approve Slots (Default ON with Telegram summary)
+              Auto-Approve Slots
             </span>
           </label>
 
@@ -143,7 +205,7 @@ export const PlannerPage: React.FC = () => {
               className="rounded border-neutral-300 dark:border-neutral-700"
             />
             <span className="font-medium text-neutral-800 dark:text-neutral-200">
-              Dry-Run Mode (Simulation only, renders/posts nothing)
+              Dry-Run Mode (Simulation only)
             </span>
           </label>
         </div>
@@ -156,93 +218,154 @@ export const PlannerPage: React.FC = () => {
       </Card>
 
       {actionMsg && (
-        <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-md text-xs border border-neutral-300 dark:border-neutral-700">
-          {actionMsg}
+        <div
+          className={`p-3.5 rounded-card text-xs flex items-center gap-2 hairline-border ${
+            actionMsg.error
+              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+          }`}
+        >
+          {actionMsg.error ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+          <span>{actionMsg.text}</span>
         </div>
       )}
 
       {/* 6 Strategy Quota Slots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {plan?.slots.map((slot) => (
-          <Card
-            key={slot.slot_index}
-            className={`p-5 relative border transition-all ${
-              slot.locked
-                ? "border-neutral-900 dark:border-white shadow-sm"
-                : "border-neutral-200 dark:border-neutral-800"
-            }`}
-          >
-            {/* Header: Time and Slot number */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="default" className="font-mono font-semibold">
-                  {slot.scheduled_time}
-                </Badge>
-                <span className="text-xs text-neutral-400 font-medium">
-                  Slot #{slot.slot_index + 1}
-                </span>
-              </div>
+        {plan?.slots.map((slot) => {
+          const isPending = slot.status === "pending" || slot.status === "approved";
+          const isRendering = slot.status === "rendering";
+          const isRendered = slot.status === "rendered";
+          const isPosted = slot.status === "posted" || slot.status === "published";
 
-              <div className="flex items-center gap-1.5">
-                {slot.id && (
-                  <button
-                    onClick={() => handleToggleLock(slot.id)}
-                    className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                    title={slot.locked ? "Slot Locked (Planner will not overwrite)" : "Lock Slot"}
-                  >
-                    {slot.locked ? (
-                      <Lock className="w-4 h-4 text-neutral-900 dark:text-white" />
-                    ) : (
-                      <Unlock className="w-4 h-4 text-neutral-400" />
+          return (
+            <Card
+              key={slot.slot_index}
+              className={`p-5 relative border transition-all flex flex-col justify-between ${
+                slot.locked
+                  ? "border-neutral-900 dark:border-white shadow-sm"
+                  : "border-neutral-200 dark:border-neutral-800"
+              }`}
+            >
+              <div>
+                {/* Header: Time and Slot number */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default" className="font-mono font-semibold">
+                      {slot.scheduled_time}
+                    </Badge>
+                    <span className="text-xs text-neutral-400 font-medium">
+                      Slot #{slot.slot_index + 1}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {slot.id && (
+                      <button
+                        onClick={() => handleToggleLock(slot.id)}
+                        className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                        title={slot.locked ? "Slot Locked" : "Lock Slot"}
+                      >
+                        {slot.locked ? (
+                          <Lock className="w-4 h-4 text-neutral-900 dark:text-white" />
+                        ) : (
+                          <Unlock className="w-4 h-4 text-neutral-400" />
+                        )}
+                      </button>
                     )}
-                  </button>
+                    <Badge
+                      variant={
+                        isPosted
+                          ? "default"
+                          : isRendered
+                          ? "default"
+                          : isRendering
+                          ? "warning"
+                          : "neutral"
+                      }
+                    >
+                      {slot.status ? slot.status.toUpperCase() : "PENDING"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Product Title */}
+                <div className="mb-2">
+                  <div className="text-[11px] text-neutral-400 uppercase tracking-wider font-semibold">
+                    Target Product
+                  </div>
+                  <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate mt-0.5">
+                    {slot.product_name}
+                  </h3>
+                </div>
+
+                {/* Hook & Style */}
+                <div className="space-y-1.5 text-xs text-neutral-600 dark:text-neutral-300 mb-3 bg-neutral-50 dark:bg-neutral-800/50 p-2.5 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-400">Hook:</span>
+                    <span className="font-medium text-neutral-800 dark:text-neutral-200">{slot.hook_style}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-400">Style:</span>
+                    <span className="font-mono text-[11px] text-neutral-500">{slot.style_id}</span>
+                  </div>
+                </div>
+
+                {/* Strategy Reason */}
+                <div className="text-[11px] text-neutral-400 italic line-clamp-2 border-t border-neutral-100 dark:border-neutral-800 pt-2 mb-4">
+                  "{slot.reason}"
+                </div>
+              </div>
+
+              {/* Slot Action Button */}
+              <div className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                {isPending && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full text-xs flex items-center justify-center gap-1.5"
+                    disabled={editing}
+                    onClick={() => handleRunAutoEdit(slot.id)}
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    Auto-Edit This Slot
+                  </Button>
                 )}
-                <Badge
-                  variant={
-                    slot.status === "approved"
-                      ? "default"
-                      : slot.status === "rendered"
-                      ? "secondary"
-                      : "warning"
-                  }
-                >
-                  {slot.status}
-                </Badge>
-              </div>
-            </div>
 
-            {/* Product Title */}
-            <div className="mb-2">
-              <div className="text-xs text-neutral-400 uppercase tracking-wider font-semibold">
-                Target Product
-              </div>
-              <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate mt-0.5">
-                {slot.product_name}
-              </h3>
-            </div>
+                {isRendering && (
+                  <div className="flex items-center justify-center gap-2 text-xs text-amber-500 py-1">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Rendering with FFmpeg...</span>
+                  </div>
+                )}
 
-            {/* Hook & Style */}
-            <div className="space-y-1.5 text-xs text-neutral-600 dark:text-neutral-300 mb-3 bg-neutral-50 dark:bg-neutral-800/50 p-2.5 rounded-md">
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-400">Hook:</span>
-                <span className="font-medium text-neutral-800 dark:text-neutral-200">{slot.hook_style}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-400">Style:</span>
-                <span className="font-mono text-[11px] text-neutral-500">{slot.style_id}</span>
-              </div>
-            </div>
+                {isRendered && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    className="w-full text-xs flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={publishing}
+                    onClick={() => handlePublishAll(slot.id)}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Publish to Buffer
+                  </Button>
+                )}
 
-            {/* AI / Rules Reasoning */}
-            <div className="text-[11px] text-neutral-400 italic line-clamp-2 border-t border-neutral-100 dark:border-neutral-800 pt-2">
-              "{slot.reason}"
-            </div>
-          </Card>
-        ))}
+                {isPosted && (
+                  <div className="text-center text-xs text-emerald-600 dark:text-emerald-400 py-1 flex items-center justify-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Scheduled to Buffer</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })}
 
         {(!plan || plan.slots.length === 0) && (
           <div className="col-span-full py-12 text-center text-neutral-400">
-            No plan slots generated for today. Click "Generate Plan Now" to build 6 strategy slots.
+            No plan slots generated for today. Click "Generate Plan" to build 6 strategy slots.
           </div>
         )}
       </div>

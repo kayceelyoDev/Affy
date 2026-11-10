@@ -99,6 +99,20 @@ async def request_middleware(request: Request, call_next):
             return JSONResponse(status_code=403, content={"detail": str(e)})
 
     response = await call_next(request)
+    
+    # Ensure CSRF token cookie is present for the frontend
+    if not request.cookies.get("csrf_token"):
+        from backend.app.core.security import generate_csrf_token
+        new_csrf = generate_csrf_token()
+        response.set_cookie(
+            key="csrf_token",
+            value=new_csrf,
+            max_age=settings.SESSION_MAX_AGE_SECONDS,
+            httponly=False,
+            samesite="lax",
+            secure=False,
+        )
+
     duration = time.time() - start_time
     
     if not request.url.path.startswith("/api/runs") and not "stream" in request.url.path:

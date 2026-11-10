@@ -40,7 +40,8 @@ class PublisherService:
         if not slot:
             raise PublisherError(f"PlanSlot #{slot_id} not found.")
 
-        # Idempotency check: if already has post_id, retrieve and return
+        # Idempotency check: if already has post_id, retrieve and return if published
+        existing_post = None
         if slot.post_id:
             p_stmt = select(Post).where(Post.id == slot.post_id)
             existing_post = (await db.execute(p_stmt)).scalar_one_or_none()
@@ -110,23 +111,35 @@ class PublisherService:
             due_at=due_at,
         )
 
-        # 5. Persist Post record
-        post = Post(
-            product_id=slot.product_id,
-            render_id=job.id if job else None,
-            buffer_post_id=buffer_res.get("id"),
-            caption=caption,
-            caption_fingerprint=fingerprint,
-            hook_style=slot.hook_style,
-            style_id=slot.style_id,
-            media_url=media_url,
-            mode=mode,
-            scheduled_for=due_at,
-            posted_at=datetime.utcnow(),
-            status="scheduled",
-        )
-        db.add(post)
-        await db.flush()
+        # 5. Persist or update Post record
+        if existing_post:
+            post = existing_post
+            post.buffer_post_id = buffer_res.get("id")
+            post.caption = caption
+            post.caption_fingerprint = fingerprint
+            post.hook_style = slot.hook_style
+            post.media_url = media_url
+            post.mode = mode
+            post.scheduled_for = due_at
+            post.posted_at = datetime.utcnow()
+            post.status = "scheduled"
+        else:
+            post = Post(
+                product_id=slot.product_id,
+                render_id=job.id if job else None,
+                buffer_post_id=buffer_res.get("id"),
+                caption=caption,
+                caption_fingerprint=fingerprint,
+                hook_style=slot.hook_style,
+                style_id=slot.style_id,
+                media_url=media_url,
+                mode=mode,
+                scheduled_for=due_at,
+                posted_at=datetime.utcnow(),
+                status="scheduled",
+            )
+            db.add(post)
+            await db.flush()
 
         # Update slot
         slot.post_id = post.id
@@ -148,10 +161,16 @@ class PublisherService:
         """
         Publishes all pending slots whose status is 'rendered' or 'approved' with an output video.
         """
-        stmt = select(PlanSlot).where(
-            PlanSlot.status.in_(["rendered", "approved"]),
-            PlanSlot.post_id.is_(None)
-        ).order_by(PlanSlot.slot_index)
+        from sqlalchemy import or_
+        stmt = (
+            select(PlanSlot)
+            .outerjoin(Post, PlanSlot.post_id == Post.id)
+            .where(
+                PlanSlot.status.in_(["rendered", "approved"]),
+                or_(PlanSlot.post_id.is_(None), Post.status == "ready_to_post")
+            )
+            .order_by(PlanSlot.slot_index)
+        )
         
         slots = (await db.execute(stmt)).scalars().all()
         published = []
