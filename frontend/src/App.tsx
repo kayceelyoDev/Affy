@@ -8,6 +8,12 @@ import { UploadPage } from './pages/Upload';
 import { ReviewQueuePage } from './pages/ReviewQueue';
 import { OrdersPage } from './pages/Orders';
 import { AnalyticsPage } from './pages/Analytics';
+import { PlannerPage } from './pages/Planner';
+import { StyleStudioPage } from './pages/StyleStudio';
+import { MusicLibraryPage } from './pages/MusicLibrary';
+import { VideosPage } from './pages/Videos';
+import { RunsPage } from './pages/Runs';
+import { SchedulesPage } from './pages/Schedules';
 
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="max-w-4xl mx-auto space-y-4">
@@ -28,19 +34,19 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<PlaceholderPage title="Creator Dashboard" subtitle="Real-time KPI overview, daily posting quota velocity, and system health." />} />
           <Route path="/design" element={<DesignGallery />} />
-          <Route path="/planner" element={<PlaceholderPage title="Today's Plan" subtitle="7x6 Strategy Quota slot allocation, hook assignments, and approval status." />} />
-          <Route path="/runs" element={<PlaceholderPage title="Pipeline & Runs" subtitle="Live background job executions, worker statuses, and SSE streaming logs." />} />
-          <Route path="/videos" element={<PlaceholderPage title="Video Catalog" subtitle="Rendered assets, Buffer publication status, and clip provenance." />} />
+          <Route path="/planner" element={<PlannerPage />} />
+          <Route path="/runs" element={<RunsPage />} />
+          <Route path="/videos" element={<VideosPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/clips" element={<PlaceholderPage title="Clip Library" subtitle="Raw product footage, metadata tags, and storage sync status." />} />
-          <Route path="/styles" element={<PlaceholderPage title="Style Studio" subtitle="Visual editor for Style 1 (Classic Hook) and custom creator templates." />} />
-          <Route path="/music" element={<PlaceholderPage title="Music Library" subtitle="Librosa beat-tracked tracks, mood tags, and BPM synchronization." />} />
+          <Route path="/styles" element={<StyleStudioPage />} />
+          <Route path="/music" element={<MusicLibraryPage />} />
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/review" element={<ReviewQueuePage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/schedules" element={<PlaceholderPage title="Schedules Manager" subtitle="Configurable cron timings, timezone management, and manual execution triggers." />} />
+          <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings & Vault" subtitle="AES-256-GCM encrypted credentials, connection tests, and regional limits." />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

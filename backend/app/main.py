@@ -18,6 +18,12 @@ from backend.app.api.ingest import router as ingest_router
 from backend.app.api.ai import router as ai_router
 from backend.app.api.orders import router as orders_router
 from backend.app.api.analytics import router as analytics_router
+from backend.app.api.planner import router as planner_router
+from backend.app.api.styles import router as styles_router
+from backend.app.api.music import router as music_router
+from backend.app.api.renders import router as renders_router
+from backend.app.api.posts import router as posts_router
+from backend.app.api.media import router as media_router
 
 configure_logging(debug=settings.DEBUG)
 
@@ -92,6 +98,12 @@ app.include_router(ingest_router)
 app.include_router(ai_router)
 app.include_router(orders_router)
 app.include_router(analytics_router)
+app.include_router(planner_router)
+app.include_router(styles_router)
+app.include_router(music_router)
+app.include_router(renders_router)
+app.include_router(posts_router, prefix="/api")
+app.include_router(media_router, prefix="/api")
 
 @app.get("/health")
 async def health():

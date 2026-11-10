@@ -9,6 +9,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    ffmpeg \
+    libsndfile1 \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Create unprivileged application user
@@ -19,6 +22,9 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY backend /app/backend
+COPY styles /app/styles
+COPY fonts /app/fonts
+COPY bot /app/bot
 RUN mkdir -p /app/data /data && chown -R appuser:appuser /app /data
 
 USER appuser
