@@ -153,17 +153,23 @@ class Post(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("products.id"), index=True, nullable=True)
+    render_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     buffer_post_id: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True, nullable=True)
     tiktok_video_id: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True, nullable=True)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     caption_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
     hook_style: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     style_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    media_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    mode: Mapped[str] = mapped_column(String(32), default="queue") # queue, exact
     scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="draft") # draft, scheduled, published, failed
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     extra_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped[Optional["Product"]] = relationship("Product")
 
 class Order(Base):
     __tablename__ = "orders"
@@ -296,3 +302,98 @@ class APIUsage(Base):
     reset_timestamp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# -------------------------------------------------------------
+# B6: PLANS & DAILY SLOTS
+# -------------------------------------------------------------
+
+class Plan(Base):
+    __tablename__ = 'plans'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[str] = mapped_column(String(16), unique=True, index=True, nullable=False) # YYYY-MM-DD
+    status: Mapped[str] = mapped_column(String(32), default='draft') # draft, approved, in_progress, completed
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    slots: Mapped[List['PlanSlot']] = relationship('PlanSlot', back_populates='plan', cascade='all, delete-orphan')
+
+class PlanSlot(Base):
+    __tablename__ = 'plan_slots'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(Integer, ForeignKey('plans.id'), index=True, nullable=False)
+    slot_index: Mapped[int] = mapped_column(Integer, nullable=False) # 0 to 5
+    scheduled_time: Mapped[str] = mapped_column(String(8), default='09:00')
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), index=True, nullable=False)
+    style_id: Mapped[str] = mapped_column(String(64), default='style_1_classic_hook')
+    hook_style: Mapped[str] = mapped_column(String(64), default='Classic Hook')
+    hook_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, default='Strategy allocation')
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(32), default='rules') # rules, ai, user
+    status: Mapped[str] = mapped_column(String(32), default='pending') # pending, approved, rendered, published, skipped
+    render_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    post_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('posts.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    plan: Mapped['Plan'] = relationship('Plan', back_populates='slots')
+    product: Mapped['Product'] = relationship('Product')
+    post: Mapped[Optional['Post']] = relationship('Post')
+
+# -------------------------------------------------------------
+# B7: RENDERS, MUSIC TRACKS & CLIP CAPTIONS
+# -------------------------------------------------------------
+
+class RenderJob(Base):
+    __tablename__ = 'render_jobs'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_slot_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('plan_slots.id'), nullable=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), index=True, nullable=False)
+    style_id: Mapped[str] = mapped_column(String(64), default='classic_hook')
+    title: Mapped[str] = mapped_column(String(255), default='')
+    subtitle: Mapped[str] = mapped_column(String(255), default='')
+    status: Mapped[str] = mapped_column(String(32), default='pending') # pending, rendering, completed, failed
+    progress_pct: Mapped[int] = mapped_column(Integer, default=0)
+    output_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    duration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    clips_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    log_tail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    product: Mapped['Product'] = relationship('Product')
+    plan_slot: Mapped[Optional['PlanSlot']] = relationship('PlanSlot')
+
+class Track(Base):
+    __tablename__ = 'tracks'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    duration: Mapped[float] = mapped_column(Float, default=0.0)
+    bpm: Mapped[float] = mapped_column(Float, default=120.0)
+    beats_count: Mapped[int] = mapped_column(Integer, default=0)
+    beats_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    safe_to_use: Mapped[bool] = mapped_column(Boolean, default=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    license_note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class ClipCaption(Base):
+    __tablename__ = 'clip_captions'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clip_id: Mapped[int] = mapped_column(Integer, ForeignKey('clips.id'), index=True, nullable=False)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), index=True, nullable=False)
+    language: Mapped[str] = mapped_column(String(16), default='en')
+    caption_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_used: Mapped[str] = mapped_column(String(64), default='gemini-1.5-flash')
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    clip: Mapped['Clip'] = relationship('Clip')
+    product: Mapped['Product'] = relationship('Product')

@@ -19,6 +19,11 @@ from backend.app.models.models import (
     PostMetricDaily,
     Scorecard,
     APIUsage,
+    Plan,
+    PlanSlot,
+    RenderJob,
+    Track,
+    ClipCaption,
 )
 
 __all__ = [
@@ -42,4 +47,9 @@ __all__ = [
     "PostMetricDaily",
     "Scorecard",
     "APIUsage",
+    "Plan",
+    "PlanSlot",
+    "RenderJob",
+    "Track",
+    "ClipCaption",
 ]
