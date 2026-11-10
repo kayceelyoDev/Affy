@@ -17,6 +17,7 @@ from backend.app.api.catalog import router as catalog_router
 from backend.app.api.ingest import router as ingest_router
 from backend.app.api.ai import router as ai_router
 from backend.app.api.orders import router as orders_router
+from backend.app.api.analytics import router as analytics_router
 
 configure_logging(debug=settings.DEBUG)
 
@@ -90,6 +91,7 @@ app.include_router(catalog_router, prefix="/api")
 app.include_router(ingest_router)
 app.include_router(ai_router)
 app.include_router(orders_router)
+app.include_router(analytics_router)
 
 @app.get("/health")
 async def health():

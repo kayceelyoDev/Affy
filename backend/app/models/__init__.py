@@ -16,6 +16,9 @@ from backend.app.models.models import (
     Upload,
     Extraction,
     AIUsage,
+    PostMetricDaily,
+    Scorecard,
+    APIUsage,
 )
 
 __all__ = [
@@ -36,4 +39,7 @@ __all__ = [
     "Upload",
     "Extraction",
     "AIUsage",
+    "PostMetricDaily",
+    "Scorecard",
+    "APIUsage",
 ]

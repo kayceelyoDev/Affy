@@ -7,6 +7,7 @@ import { ProductsPage } from './pages/Products';
 import { UploadPage } from './pages/Upload';
 import { ReviewQueuePage } from './pages/ReviewQueue';
 import { OrdersPage } from './pages/Orders';
+import { AnalyticsPage } from './pages/Analytics';
 
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="max-w-4xl mx-auto space-y-4">
@@ -38,7 +39,7 @@ export const App: React.FC = () => {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/review" element={<ReviewQueuePage />} />
           <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/analytics" element={<PlaceholderPage title="Analytics Engine" subtitle="Source chain metrics (Buffer -> TikTok Display API -> CSV)." />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/schedules" element={<PlaceholderPage title="Schedules Manager" subtitle="Configurable cron timings, timezone management, and manual execution triggers." />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings & Vault" subtitle="AES-256-GCM encrypted credentials, connection tests, and regional limits." />} />
           <Route path="*" element={<Navigate to="/" replace />} />

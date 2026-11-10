@@ -14,9 +14,9 @@
 | **B1** | Foundation and design system | R01, R02, R03, R06, R21, R22 | **DONE** | **PASSED** (commit `2c57ecd`) |
 | **B2** | Storage layer (Local & Drive) | R05, R17, R19 | **DONE** | **PASSED** (Gate verified, 9/9 tests pass) |
 | **B3** | Catalog & clip library | R17 | **DONE** | **PASSED** (commit `44cb453`) |
-| **B4** | AI gateway & Data Upload | R08 | **DONE** | **PASSED** (20/20 tests pass, frontend built) |
-| **B5** | Analytics, attribution, scoring | R07, R18 | IN PROGRESS | - |
-| **B6** | Planner (daily brain) | R09, R19 | NOT STARTED | - |
+| **B4** | AI gateway & Data Upload | R08 | **DONE** | **PASSED** (commit `a7dc022`) |
+| **B5** | Analytics, attribution, scoring | R07, R18 | **DONE** | **PASSED** (25/25 tests pass, frontend built) |
+| **B6** | Planner (daily brain) | R09, R19 | IN PROGRESS | - |
 | **B7** | Render engine & 5 styles + music | R12, R13, R14, R15, R16 | NOT STARTED | - |
 | **B8** | Captions, publisher, schedules | R04, R05 | NOT STARTED | - |
 | **B9** | Telegram bot (parity plus) | R01, R11 | NOT STARTED | - |
@@ -92,11 +92,39 @@
 
 ---
 
+## 2. What Was Built in B5 (Analytics, Attribution, Scoring)
+
+1. **Database Schema & Models:**
+   - `PostMetricDaily`: post_id, date, views, likes, comments, shares, source ('buffer', 'tiktok_display', 'csv').
+   - `Scorecard`: period, product_id, score, tier ('SCALE', 'STEADY', 'TEST', 'COOLDOWN'), trend ('UP', 'DOWN', 'STABLE', 'NEW'), components_json, profile_version ('v1', 'v2'), explanation.
+   - `APIUsage`: service ('buffer', 'tiktok', 'gemini'), day, requests_count, remaining_from_headers, reset_timestamp.
+2. **Metric Sources & Aggregator (`MetricAggregator`):**
+   - Source chain behind unified `MetricSource` interface: `BufferMetricSource` > `TikTokDisplayMetricSource` > `CSVMetricSource`.
+   - Quota guard: automatically halts metric queries when Buffer quota < 10 to guarantee publishing capacity.
+   - Priority merging with source provenance attribution (tracks which provider filled each metric).
+3. **Attribution Engine (`backend/app/services/analytics/attribution.py`):**
+   - Robust caption fingerprinting (removes hashtags, urls, symbols, lowercases, hashes core keyword tokens).
+   - Matches raw order video caption to published post.
+   - Per-video commission and GMV attribution rollup.
+4. **Scoring Engine (`backend/app/services/analytics/scoring.py`):**
+   - **v1 Exact Mathematical Parity:** Weighted commission (settled 1.0, pending 0.7), commission per video, orders per 1,000 views, cancellation rate, unproven multiplier (0.6 for <2 videos & unproven), zero-floor, exact tier boundaries (SCALE >= 25, STEADY >= 5, COOLDOWN, TEST), and trend tracking (+/- 2.0). Verified against exact specifications.
+   - **v2 Multi-Signal Formula:** View velocity bonus (+velocity/500 capped at +10), margin rate incentive, and stock clip depletion warning (-5.0 if <3 clips remaining) with human-readable decision explanation.
+   - Automated Sunday Strategy Engine batch calculation job across all active products.
+5. **REST APIs & Frontend UI:**
+   - Endpoints: `GET /api/analytics/overview` (GMV, views, orders/1k views, comm/video, cashflow ledger), `GET /api/analytics/scorecards`, `POST /api/analytics/scorecards/run`, `GET /api/analytics/styles`.
+   - Frontend Analytics Page (`/analytics`): KPI metric cards, Cashflow & Payout Pipeline with cancellation risk-adjustment, Product Strategy Scorecard leaderboard with tier badges and trend arrows, Hook & Style Yield Matrix.
+6. **Contract & Regression Tests:**
+   - 5 comprehensive tests in `backend/tests/test_b5_analytics_scoring.py` (v1 mathematical parity, v2 multi-signal, caption fingerprinting, multi-source merge & priority with quota guard, end-to-end API lifecycle).
+   - Total test suite: 25/25 tests passing in Docker container.
+   - Frontend container build verified (`autopilot-frontend:test`).
+
+---
+
 ## 3. Exact Commands Run & Real Results
 
-- `docker build -t autopilot-frontend:test -f docker/Dockerfile.frontend .` -> `RESULT: OK (built in 3.54s)`
+- `docker build -t autopilot-frontend:test -f docker/Dockerfile.frontend .` -> `RESULT: OK (built in 3.60s)`
 - `docker build -t autopilot-api:test -f docker/Dockerfile.api .` -> `RESULT: OK`
-- `docker run --rm autopilot-api:test pytest backend/tests -v` -> `RESULT: 20 passed in 7.68s`
+- `docker run --rm autopilot-api:test pytest backend/tests -v` -> `RESULT: 25 passed in 10.49s`
 - `python scripts/scan_secrets.py` -> `RESULT: Secret scan PASSED: 0 secrets found`
 - `python scripts/check_inventory.py` -> `RESULT: Inventory check PASSED: All 148 nodes accounted for`
 
@@ -104,15 +132,11 @@
 
 ## 4. Next Exact Steps
 
-1. Stage and commit B4 with message `feat(b4): implement ai gateway, multi-image batching, data upload, review queue, and orders master`.
-2. Proceed autonomously to **B5 (Analytics sources, attribution, scoring)**:
-   - Metric sources interface with priority and per-source enable:
-     1. Buffer post metrics (paginated posts with metrics or aggregate queries).
-     2. TikTok Display API `video.list` (own videos, daily snapshots, token refresh).
-     3. TikTok Studio CSV upload.
-   - Merge metrics by `buffer_post_id` and TikTok `video_id`, with source attribution tracking.
-   - Quota meter for Buffer & AI requests from headers & local counters.
-   - Attribution engine: Caption fingerprint matching of orders to posts; per-video commission.
-   - Scoring profiles: v1 (exact n8n formula reproduction) and v2 (multi-signal formula).
-   - Frontend Analytics Page (`/analytics`): GMV, views, orders/1k views, cashflow (settled/pending), 24h & 72h velocity.
-   - Write tests (`test_b5_analytics_scoring.py`), run gate, update trace/status, commit.
+1. Stage and commit B5 with message `feat(b5): implement analytics sources, attribution engine, sunday strategy scoring, and analytics ui`.
+2. Proceed autonomously to **B6 (Planner - The Daily Brain)**:
+   - 7x6 Strategy Quota Matrix: 6 posting slots per day (e.g. 9:00, 11:00, 14:00, 16:00, 19:00, 21:00 PHT).
+   - Idempotent daily slot planning: fills today's 6 slots using Sunday Strategy Scorecards (priority to SCALE and STEADY tiers), rotates styles and hooks without repeat penalties.
+   - Slot locking: user-locked or manual slots are preserved and respected by the automated planner.
+   - Auto-approve toggle and Morning Daily Plan job (7:00 AM Manila default).
+   - Frontend Today's Plan page (`/planner`): 6 slot cards with time, product, hook, style, reason, lock/unlock toggle, and "Generate Plan Now" button.
+   - Contract tests (`test_b6_planner.py`), run gate, update trace/status, commit.

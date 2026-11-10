@@ -10,7 +10,7 @@ This matrix tracks every functional and non-functional requirement defined in th
 | **R04** | Buffer publishing/scheduling + editable schedule timings & manual run | `backend/app/services/scheduler.py`, `backend/app/api/schedules.py` | APScheduler test, manual trigger test passed | IN PROGRESS |
 | **R05** | Third-party integrations (Buffer, Gemini, Telegram, Drive, Cloudinary) | `backend/app/services/storage/`, `scripts/spikes/` | Spikes S1-S7, StorageProvider contract tests | IN PROGRESS |
 | **R06** | Vault encrypted tokens, masked in UI, editable with test buttons | `backend/app/services/vault.py`, `backend/app/api/settings.py` | `test_vault_encryption_roundtrip`, `test_login_and_masked_secrets_api` | **DONE** |
-| **R07** | Analytics source chain (Buffer, TikTok Display, CSV) + quota meter | `backend/app/services/analytics/`, `frontend/src/pages/` | Source priority test, quota counter | NOT STARTED |
+| **R07** | Analytics source chain (Buffer, TikTok Display, CSV) + quota meter | `backend/app/services/analytics/sources.py`, `frontend/src/pages/Analytics.tsx` | Metric source aggregator priority test, quota guard test | **DONE** |
 | **R08** | Data Upload page: batched screenshots, Gemini OCR, dedupe, review | `backend/app/services/ingest/`, `backend/app/api/ingest.py`, `frontend/src/pages/Upload.tsx`, `frontend/src/pages/ReviewQueue.tsx`, `frontend/src/pages/Orders.tsx` | 6 unit/contract tests (`test_b4_ai_ingest.py`), frontend built | **DONE** |
 | **R09** | Daily planner: 7x6 strategy quota, slot planning, style/hook picking | `backend/app/services/planner/`, `frontend/src/pages/` | Quota allocation test, idempotency test | NOT STARTED |
 | **R10** | Open-source ready, synthetic demo mode, configurable localization | `backend/app/core/config.py`, `LICENSE`, `README.md` | Configuration test, license placeholder | IN PROGRESS |
@@ -21,7 +21,7 @@ This matrix tracks every functional and non-functional requirement defined in th
 | **R15** | Style Studio: clone, customize, real-time preview, save style | `backend/app/api/`, `frontend/src/pages/` | Style CRUD test, preview pipeline | NOT STARTED |
 | **R16** | Music library: beat detection, mood/tempo tagging, TikTok audio | `worker/` | Librosa beat detection, yt-dlp spike S5 | IN PROGRESS |
 | **R17** | Catalog: products as folders, clip library, alias resolution | `backend/app/services/catalog/`, `backend/app/api/catalog.py`, `frontend/src/pages/Products.tsx` | 5 unit/contract tests (`test_b3_catalog.py`), frontend built | **DONE** |
-| **R18** | Scoring engine: Sunday strategy, scorecards, v1 & v2 formulas | `backend/app/services/scoring/` | Formula v1 vs v2 regression tests | NOT STARTED |
+| **R18** | Scoring engine: Sunday strategy, scorecards, v1 & v2 formulas | `backend/app/services/analytics/scoring.py`, `backend/app/api/analytics.py` | Exact v1 mathematical parity, v2 multi-signal tests | **DONE** |
 | **R19** | Safety & idempotency: retries, backoff, audit log, locked slots | `LRUCacheManager` (job locks), CSRF middleware | Lock eviction protection test passed | IN PROGRESS |
 | **R20** | Data migration CLI: import from CSVs, shadow mode plan comparison | `scripts/import_from_n8n.py` | Import wizard verified | IN PROGRESS |
 | **R21** | UI/UX: Apple clarity, Notion calm, B&W palette, command palette | `frontend/src/components/`, `frontend/src/pages/` | Storage page, Design gallery compiled | IN PROGRESS |

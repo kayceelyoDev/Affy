@@ -249,3 +249,50 @@ class AIUsage(Base):
     tokens_output: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# -------------------------------------------------------------
+# B5: METRICS, SCORECARDS & API USAGE
+# -------------------------------------------------------------
+
+class PostMetricDaily(Base):
+    __tablename__ = 'post_metrics_daily'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey('posts.id'), index=True, nullable=False)
+    date: Mapped[str] = mapped_column(String(16), index=True, nullable=False) # YYYY-MM-DD
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    likes: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+    shares: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(32), default='buffer') # buffer, tiktok_display, csv
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    post: Mapped['Post'] = relationship('Post')
+
+class Scorecard(Base):
+    __tablename__ = 'scorecards'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    period: Mapped[str] = mapped_column(String(32), index=True, default='weekly')
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), index=True, nullable=False)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    tier: Mapped[str] = mapped_column(String(32), default='TEST') # SCALE, STEADY, TEST, COOLDOWN
+    trend: Mapped[str] = mapped_column(String(32), default='NEW') # UP, DOWN, STABLE, NEW
+    components_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    profile_version: Mapped[str] = mapped_column(String(16), default='v1') # v1, v2
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped['Product'] = relationship('Product')
+
+class APIUsage(Base):
+    __tablename__ = 'api_usage'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service: Mapped[str] = mapped_column(String(64), index=True, nullable=False) # buffer, tiktok, etc.
+    day: Mapped[str] = mapped_column(String(16), index=True, nullable=False) # YYYY-MM-DD
+    requests_count: Mapped[int] = mapped_column(Integer, default=0)
+    remaining_from_headers: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reset_timestamp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
