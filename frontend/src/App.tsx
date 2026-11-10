@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Shell } from './components/layout/Shell';
 import { DesignGallery } from './pages/DesignGallery';
+import { StoragePage } from './pages/Storage';
 
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="max-w-4xl mx-auto space-y-4">
@@ -29,7 +30,7 @@ export const App: React.FC = () => {
           <Route path="/clips" element={<PlaceholderPage title="Clip Library" subtitle="Raw product footage, metadata tags, and storage sync status." />} />
           <Route path="/styles" element={<PlaceholderPage title="Style Studio" subtitle="Visual editor for Style 1 (Classic Hook) and custom creator templates." />} />
           <Route path="/music" element={<PlaceholderPage title="Music Library" subtitle="Librosa beat-tracked tracks, mood tags, and BPM synchronization." />} />
-          <Route path="/storage" element={<PlaceholderPage title="Storage & Sync" subtitle="Local NVMe cache and Google Drive service account sync manager." />} />
+          <Route path="/storage" element={<StoragePage />} />
           <Route path="/upload" element={<PlaceholderPage title="Data Upload & Review" subtitle="Batch screenshot ingestion, Gemini OCR extraction, and deduplication." />} />
           <Route path="/orders" element={<PlaceholderPage title="Orders Log" subtitle="TikTok Shop orders, GMV, and commission attribution ledger." />} />
           <Route path="/analytics" element={<PlaceholderPage title="Analytics Engine" subtitle="Source chain metrics (Buffer -> TikTok Display API -> CSV)." />} />

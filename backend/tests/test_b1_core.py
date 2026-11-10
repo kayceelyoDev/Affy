@@ -12,15 +12,6 @@ from backend.app.models.models import User, Setting, SecretVault, Schedule
 from backend.app.services.scheduler import app_scheduler
 from backend.app.main import app
 
-@pytest_asyncio.fixture(autouse=True)
-async def init_test_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await app_scheduler.init_schedules()
-    yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
 @pytest.fixture
 def tmp_key_file():
     with tempfile.NamedTemporaryFile(delete=False) as f:

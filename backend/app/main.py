@@ -12,6 +12,7 @@ from backend.app.api.auth import router as auth_router
 from backend.app.api.settings import router as settings_router
 from backend.app.api.schedules import router as schedules_router
 from backend.app.api.runs import router as runs_router
+from backend.app.api.storage import router as storage_router
 
 configure_logging(debug=settings.DEBUG)
 
@@ -80,6 +81,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
+app.include_router(storage_router, prefix="/api")
 
 @app.get("/health")
 async def health():
