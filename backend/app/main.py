@@ -24,6 +24,9 @@ from backend.app.api.music import router as music_router
 from backend.app.api.renders import router as renders_router
 from backend.app.api.posts import router as posts_router
 from backend.app.api.media import router as media_router
+from backend.app.api.demo import router as demo_router
+from backend.app.services.demo import DemoSeeder
+from backend.app.core.database import AsyncSessionLocal
 
 configure_logging(debug=settings.DEBUG)
 
@@ -35,6 +38,12 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database schema initialized.")
+
+    if settings.DEMO_MODE:
+        logger.info("DEMO_MODE active: seeding synthetic creator dataset...")
+        async with AsyncSessionLocal() as demo_sess:
+            await DemoSeeder.seed_demo_data(demo_sess)
+        logger.info("Synthetic demo dataset ready.")
 
     # Initialize and start scheduler
     await app_scheduler.init_schedules()
@@ -104,6 +113,7 @@ app.include_router(music_router)
 app.include_router(renders_router)
 app.include_router(posts_router, prefix="/api")
 app.include_router(media_router, prefix="/api")
+app.include_router(demo_router)
 
 @app.get("/health")
 async def health():
