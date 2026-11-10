@@ -11,7 +11,7 @@ This matrix tracks every functional and non-functional requirement defined in th
 | **R05** | Third-party integrations (Buffer, Gemini, Telegram, Drive, Cloudinary) | `backend/app/services/storage/`, `scripts/spikes/` | Spikes S1-S7, StorageProvider contract tests | IN PROGRESS |
 | **R06** | Vault encrypted tokens, masked in UI, editable with test buttons | `backend/app/services/vault.py`, `backend/app/api/settings.py` | `test_vault_encryption_roundtrip`, `test_login_and_masked_secrets_api` | **DONE** |
 | **R07** | Analytics source chain (Buffer, TikTok Display, CSV) + quota meter | `backend/app/services/analytics/`, `frontend/src/pages/` | Source priority test, quota counter | NOT STARTED |
-| **R08** | Data Upload page: batched screenshots, Gemini OCR, dedupe, review | `backend/app/services/upload/`, `frontend/src/pages/` | Batch OCR test, 18-digit order dedupe test | NOT STARTED |
+| **R08** | Data Upload page: batched screenshots, Gemini OCR, dedupe, review | `backend/app/services/ingest/`, `backend/app/api/ingest.py`, `frontend/src/pages/Upload.tsx`, `frontend/src/pages/ReviewQueue.tsx`, `frontend/src/pages/Orders.tsx` | 6 unit/contract tests (`test_b4_ai_ingest.py`), frontend built | **DONE** |
 | **R09** | Daily planner: 7x6 strategy quota, slot planning, style/hook picking | `backend/app/services/planner/`, `frontend/src/pages/` | Quota allocation test, idempotency test | NOT STARTED |
 | **R10** | Open-source ready, synthetic demo mode, configurable localization | `backend/app/core/config.py`, `LICENSE`, `README.md` | Configuration test, license placeholder | IN PROGRESS |
 | **R11** | Telegram bot parity: night summary, approvals, long polling | `bot/main.py` | Bot process skeleton, long polling loop | NOT STARTED |

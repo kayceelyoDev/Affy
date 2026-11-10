@@ -4,6 +4,9 @@ import { Shell } from './components/layout/Shell';
 import { DesignGallery } from './pages/DesignGallery';
 import { StoragePage } from './pages/Storage';
 import { ProductsPage } from './pages/Products';
+import { UploadPage } from './pages/Upload';
+import { ReviewQueuePage } from './pages/ReviewQueue';
+import { OrdersPage } from './pages/Orders';
 
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="max-w-4xl mx-auto space-y-4">
@@ -32,8 +35,9 @@ export const App: React.FC = () => {
           <Route path="/styles" element={<PlaceholderPage title="Style Studio" subtitle="Visual editor for Style 1 (Classic Hook) and custom creator templates." />} />
           <Route path="/music" element={<PlaceholderPage title="Music Library" subtitle="Librosa beat-tracked tracks, mood tags, and BPM synchronization." />} />
           <Route path="/storage" element={<StoragePage />} />
-          <Route path="/upload" element={<PlaceholderPage title="Data Upload & Review" subtitle="Batch screenshot ingestion, Gemini OCR extraction, and deduplication." />} />
-          <Route path="/orders" element={<PlaceholderPage title="Orders Log" subtitle="TikTok Shop orders, GMV, and commission attribution ledger." />} />
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="/review" element={<ReviewQueuePage />} />
+          <Route path="/orders" element={<OrdersPage />} />
           <Route path="/analytics" element={<PlaceholderPage title="Analytics Engine" subtitle="Source chain metrics (Buffer -> TikTok Display API -> CSV)." />} />
           <Route path="/schedules" element={<PlaceholderPage title="Schedules Manager" subtitle="Configurable cron timings, timezone management, and manual execution triggers." />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings & Vault" subtitle="AES-256-GCM encrypted credentials, connection tests, and regional limits." />} />

@@ -91,10 +91,38 @@ export const StatusDot: React.FC<StatusDotProps> = ({ status, grayscale = false,
 };
 
 // --- BADGE ---
-export const Badge: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => {
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: 'default' | 'secondary' | 'outline' | 'warning' | 'destructive';
+}
+
+export const Badge: React.FC<BadgeProps> = ({ children, variant = 'default', className, ...props }) => {
+  const variants = {
+    default: 'bg-black text-white dark:bg-white dark:text-black',
+    secondary: 'bg-black/5 dark:bg-white/5 text-neutral-800 dark:text-neutral-200',
+    outline: 'border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300',
+    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+    destructive: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
+  };
+
   return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium hairline-border bg-black/5 dark:bg-white/5', className)}>
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium hairline-border',
+        variants[variant],
+        className
+      )}
+      {...props}
+    >
       {children}
     </span>
+  );
+};
+
+// --- TABLE ---
+export const Table: React.FC<React.TableHTMLAttributes<HTMLTableElement>> = ({ className, children, ...props }) => {
+  return (
+    <table className={cn('w-full border-collapse text-left', className)} {...props}>
+      {children}
+    </table>
   );
 };

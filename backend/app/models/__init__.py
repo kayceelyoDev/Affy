@@ -10,6 +10,12 @@ from backend.app.models.models import (
     Clip,
     Alias,
     ClipTag,
+    Post,
+    Order,
+    SalesDaily,
+    Upload,
+    Extraction,
+    AIUsage,
 )
 
 __all__ = [
@@ -24,4 +30,10 @@ __all__ = [
     "Clip",
     "Alias",
     "ClipTag",
+    "Post",
+    "Order",
+    "SalesDaily",
+    "Upload",
+    "Extraction",
+    "AIUsage",
 ]
