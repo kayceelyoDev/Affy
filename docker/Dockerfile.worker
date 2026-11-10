@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     fontconfig \
-    fonts-montserrat \
+    fonts-freefont-ttf \
     fonts-dejavu-core \
     curl \
     ca-certificates \
