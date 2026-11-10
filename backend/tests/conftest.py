@@ -1,3 +1,12 @@
+import os
+import tempfile
+from pathlib import Path
+
+# Direct all test database and storage operations to an isolated temporary directory
+_test_temp_dir = tempfile.TemporaryDirectory()
+os.environ["DATA_DIR"] = _test_temp_dir.name
+os.environ["ENVIRONMENT"] = "testing"
+
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from backend.app.core.database import Base, engine, AsyncSessionLocal
