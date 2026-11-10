@@ -71,19 +71,25 @@ async def update_setting(
         await vault_service.set_secret(db, key, req.value, actor=current_user.username)
         return {"ok": True, "key": key, "masked": vault_service.mask_secret(req.value)}
     else:
+        save_val = req.value
+        if key == "GOOGLE_DRIVE_FOLDER_ID" and save_val:
+            import re
+            match = re.search(r'folders/([a-zA-Z0-9_-]+)', save_val)
+            save_val = match.group(1) if match else save_val.strip()
+
         stmt = select(Setting).where(Setting.key == key)
         record = (await db.execute(stmt)).scalar_one_or_none()
         if record:
-            record.value = req.value
+            record.value = save_val
             record.description = req.description or record.description
         else:
-            record = Setting(key=key, value=req.value, is_secret=False, description=req.description)
+            record = Setting(key=key, value=save_val, is_secret=False, description=req.description)
             db.add(record)
         
         audit = AuditLog(action="SETTING_UPDATED", actor=current_user.username, details_json=f'{{"key": "{key}"}}')
         db.add(audit)
         await db.commit()
-        return {"ok": True, "key": key, "value": req.value}
+        return {"ok": True, "key": key, "value": save_val}
 
 @router.post("/test/{service}")
 async def test_connection(
@@ -178,13 +184,17 @@ async def test_connection(
                 "message": "GOOGLE_DRIVE_SERVICE_ACCOUNT not configured in vault. Enter credentials first.",
             }
 
-        folder_id = None
+        raw_fid = ""
         if req_body and req_body.folder_id:
-            folder_id = req_body.folder_id.strip()
+            raw_fid = req_body.folder_id.strip()
         else:
             folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
             folder_rec = (await db.execute(folder_stmt)).scalar_one_or_none()
-            folder_id = folder_rec.value.strip() if folder_rec and folder_rec.value else None
+            raw_fid = folder_rec.value.strip() if folder_rec and folder_rec.value else ""
+
+        import re
+        match = re.search(r'folders/([a-zA-Z0-9_-]+)', raw_fid)
+        folder_id = match.group(1) if match else raw_fid
 
         try:
             test_res = await run_test_drive(sa_info, folder_id=folder_id)

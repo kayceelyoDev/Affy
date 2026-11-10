@@ -336,3 +336,26 @@ async def rescan_catalog_clips(
 ):
     count = await catalog_service.scan_clips_directory(db, local_storage)
     return {"ok": True, "registered_clips": count}
+
+@router.delete("/catalog/clips/{clip_id}")
+async def delete_clip(
+    clip_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    stmt = select(Clip).where(Clip.id == clip_id)
+    clip = (await db.execute(stmt)).scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clip not found")
+
+    try:
+        if hasattr(local_storage, "root") and clip.file_path:
+            file_on_disk = local_storage.root / clip.file_path
+            if file_on_disk.exists():
+                file_on_disk.unlink()
+    except Exception as e:
+        logger.warning("Could not delete physical clip file", path=clip.file_path, error=str(e))
+
+    await db.delete(clip)
+    await db.commit()
+    return {"ok": True, "message": f"Clip #{clip_id} deleted"}

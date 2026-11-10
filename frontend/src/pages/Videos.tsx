@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Table } from '../components/ui';
 import { api } from '../api/client';
@@ -165,6 +166,28 @@ export const VideosPage: React.FC = () => {
     }
   };
 
+  const handleDeletePost = async (id: number) => {
+    if (!confirm(`Delete post #${id}?`)) return;
+    try {
+      await api.delete(`/api/posts/${id}`);
+      setActionAlert({ type: 'success', text: `Post #${id} deleted.` });
+      await fetchPosts();
+    } catch (e: any) {
+      setActionAlert({ type: 'error', text: 'Delete failed: ' + e.message });
+    }
+  };
+
+  const handleClearAllPosts = async () => {
+    if (!confirm('Are you sure you want to delete ALL posts from the queue?')) return;
+    try {
+      await api.post('/api/posts/clear');
+      setActionAlert({ type: 'success', text: 'All posts cleared successfully.' });
+      await fetchPosts();
+    } catch (e: any) {
+      setActionAlert({ type: 'error', text: 'Clear failed: ' + e.message });
+    }
+  };
+
   const filteredPosts = posts.filter((p) => {
     const q = search.toLowerCase();
     return (
@@ -202,6 +225,19 @@ export const VideosPage: React.FC = () => {
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+
+          {posts.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleClearAllPosts}
+              className="gap-1.5 text-red-500 hover:bg-red-500/10 border-red-500/30"
+              title="Delete all posts in the queue"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear All Posts
+            </Button>
+          )}
 
           <Button
             variant="primary"
@@ -433,6 +469,15 @@ export const VideosPage: React.FC = () => {
                             title="Regenerate Taglish Caption & Fingerprint"
                           >
                             <RefreshCw className={`w-3.5 h-3.5 ${regeneratingId === post.id ? 'animate-spin' : ''}`} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeletePost(post.id)}
+                            className="text-xs h-7 px-2 text-neutral-400 hover:text-red-500"
+                            title="Delete Post"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </td>
                       </tr>

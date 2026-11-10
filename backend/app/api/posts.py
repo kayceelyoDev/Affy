@@ -248,3 +248,27 @@ async def regenerate_caption(
         )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.delete("/{post_id}")
+async def delete_post(
+    post_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    stmt = select(Post).where(Post.id == post_id)
+    post = (await db.execute(stmt)).scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    await db.delete(post)
+    await db.commit()
+    return {"ok": True, "message": f"Post #{post_id} deleted."}
+
+@router.post("/clear")
+async def clear_all_posts(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from sqlalchemy import delete
+    await db.execute(delete(Post))
+    await db.commit()
+    return {"ok": True, "message": "All posts cleared."}

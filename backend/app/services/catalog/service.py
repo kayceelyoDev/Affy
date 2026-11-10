@@ -120,71 +120,89 @@ def probe_video_file(file_path: str) -> dict:
 class CatalogService:
     @staticmethod
     async def scan_clips_directory(db: AsyncSession, storage: StorageProvider) -> int:
-        """Scan storage /clips/<Category>/<ProductFolder>/ and auto-register products & clips."""
+        """Scan storage clips directory and auto-register products & clips.
+        Supports both 1-level (clips/<ProductFolder>/<clip_files>) and 2-level (clips/<Category>/<ProductFolder>/<clip_files>).
+        """
         logger.info("Scanning catalog clips from storage...")
-        categories = await storage.list("clips")
+        root_entries = await storage.list("clips")
         registered_clips = 0
 
-        for cat_entry in categories:
-            if not cat_entry.is_dir:
-                continue
-            cat_name = cat_entry.name
-            product_folders = await storage.list(cat_entry.path)
-
-            for prod_folder in product_folders:
-                if not prod_folder.is_dir:
-                    continue
-                prod_name = prod_folder.name.replace("_", " ")
-
-                # Find or create product
-                stmt = select(Product).where(Product.folder_path == prod_folder.path)
-                product = (await db.execute(stmt)).scalar_one_or_none()
-                if not product:
-                    product = Product(
-                        name=prod_name,
-                        category=cat_name,
-                        folder_path=prod_folder.path,
-                        commission_rate=0.15,
-                        margin_rate=0.35,
-                        active=True,
-                    )
-                    db.add(product)
+        async def _process_product_dir(prod_path: str, prod_name: str, category_name: str = "Drive Folders"):
+            nonlocal registered_clips
+            # Find product by folder_path or by normalized name
+            stmt = select(Product).where(Product.folder_path == prod_path)
+            product = (await db.execute(stmt)).scalar_one_or_none()
+            if not product:
+                display_name = prod_name.replace("_", " ").strip()
+                name_stmt = select(Product).where(Product.name == display_name)
+                product = (await db.execute(name_stmt)).scalar_one_or_none()
+            
+            if not product:
+                display_name = prod_name.replace("_", " ").strip()
+                product = Product(
+                    name=display_name,
+                    category=category_name,
+                    folder_path=prod_path,
+                    commission_rate=0.15,
+                    margin_rate=0.35,
+                    active=True,
+                )
+                db.add(product)
+                await db.flush()
+            else:
+                if product.folder_path != prod_path:
+                    product.folder_path = prod_path
                     await db.flush()
 
-                # Scan clips inside product folder
-                clip_files = await storage.list(prod_folder.path)
-                for clip_file in clip_files:
-                    if clip_file.is_dir or not clip_file.name.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
-                        continue
+            clip_files = await storage.list(prod_path)
+            for clip_file in clip_files:
+                if clip_file.is_dir or not clip_file.name.lower().endswith((".mp4", ".mov", ".mkv", ".webm")):
+                    continue
 
-                    clip_stmt = select(Clip).where(Clip.file_path == clip_file.path)
-                    existing_clip = (await db.execute(clip_stmt)).scalar_one_or_none()
-                    if not existing_clip:
-                        # Probe clip
-                        local_path = None
-                        if hasattr(storage, "root"):
-                            local_path = str(storage.root / clip_file.path)
-                        meta = probe_video_file(local_path) if local_path else {
-                            "width": 1080, "height": 1920, "duration": 5.0, "fps": 30.0, "codec": "h264", "is_hdr": False, "has_audio": True, "is_silent": False
-                        }
+                clip_stmt = select(Clip).where(Clip.file_path == clip_file.path)
+                existing_clip = (await db.execute(clip_stmt)).scalar_one_or_none()
+                if not existing_clip:
+                    local_path = None
+                    if hasattr(storage, "root"):
+                        local_path = str(storage.root / clip_file.path)
+                    meta = probe_video_file(local_path) if local_path else {
+                        "width": 1080, "height": 1920, "duration": 5.0, "fps": 30.0, "codec": "h264", "is_hdr": False, "has_audio": True, "is_silent": False
+                    }
 
-                        new_clip = Clip(
-                            product_id=product.id,
-                            file_path=clip_file.path,
-                            filename=clip_file.name,
-                            size_bytes=clip_file.size_bytes,
-                            duration_seconds=meta["duration"],
-                            width=meta["width"],
-                            height=meta["height"],
-                            fps=meta["fps"],
-                            codec=meta["codec"],
-                            is_hdr=meta["is_hdr"],
-                            has_audio=meta["has_audio"],
-                            is_silent=meta["is_silent"],
-                            status="usable",
-                        )
-                        db.add(new_clip)
-                        registered_clips += 1
+                    new_clip = Clip(
+                        product_id=product.id,
+                        file_path=clip_file.path,
+                        filename=clip_file.name,
+                        size_bytes=clip_file.size_bytes,
+                        duration_seconds=meta["duration"],
+                        width=meta["width"],
+                        height=meta["height"],
+                        fps=meta["fps"],
+                        codec=meta["codec"],
+                        is_hdr=meta["is_hdr"],
+                        has_audio=meta["has_audio"],
+                        is_silent=meta["is_silent"],
+                        status="usable",
+                    )
+                    db.add(new_clip)
+                    registered_clips += 1
+
+        for entry in root_entries:
+            if not entry.is_dir:
+                continue
+
+            children = await storage.list(entry.path)
+            has_videos = any(not c.is_dir and c.name.lower().endswith((".mp4", ".mov", ".mkv", ".webm")) for c in children)
+            has_subdirs = any(c.is_dir for c in children)
+
+            if has_videos or not has_subdirs:
+                # Direct product folder (Drive subfolder)
+                await _process_product_dir(entry.path, entry.name, category_name="Drive Folders")
+            else:
+                # Nested category folder
+                for child in children:
+                    if child.is_dir:
+                        await _process_product_dir(child.path, child.name, category_name=entry.name)
 
         await db.commit()
         logger.info("Catalog scan completed", registered_clips=registered_clips)

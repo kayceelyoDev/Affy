@@ -34,7 +34,12 @@ class StorageSyncService:
                 sa_token = await vault_service.get_secret(session, "GOOGLE_DRIVE_SERVICE_ACCOUNT")
                 folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
                 folder_rec = (await session.execute(folder_stmt)).scalar_one_or_none()
-                folder_id = folder_rec.value if folder_rec else None
+                raw_folder_id = folder_rec.value if folder_rec else None
+                folder_id = None
+                if raw_folder_id:
+                    import re
+                    match = re.search(r'folders/([a-zA-Z0-9_-]+)', raw_folder_id)
+                    folder_id = match.group(1) if match else raw_folder_id.strip()
 
                 if sa_token and folder_id:
                     import json
@@ -44,16 +49,33 @@ class StorageSyncService:
                     try:
                         sa_info = json.loads(sa_token)
                         drive_items = await list_drive_subfolders_and_clips(sa_info, folder_id)
+                        sem = asyncio.Semaphore(4)
+
+                        async def _download_one(clip, folder):
+                            nonlocal synced_count
+                            cname = clip["name"]
+                            cid = clip["id"]
+                            dest_file = self.local.root / "clips" / folder / cname
+                            if not dest_file.exists():
+                                dest_file.parent.mkdir(parents=True, exist_ok=True)
+                                async with sem:
+                                    try:
+                                        await download_file_from_drive(sa_info, cid, dest_file)
+                                        synced_count += 1
+                                    except Exception as dl_err:
+                                        logger.warning("Error downloading clip", clip=cname, error=str(dl_err))
+
+                        tasks = []
                         for item in drive_items:
-                            folder_name = item["folder_name"]
-                            for clip in item["clips"]:
-                                clip_name = clip["name"]
-                                cid = clip["id"]
-                                dest_file = self.local.root / "clips" / folder_name / clip_name
-                                if not dest_file.exists():
-                                    logger.info("Downloading new clip from Drive", folder=folder_name, clip=clip_name)
-                                    await download_file_from_drive(sa_info, cid, dest_file)
-                                    synced_count += 1
+                            folder_name = item["folder_name"].strip()
+                            if item["folder_id"] == folder_id or folder_name.upper() == "TIKTOK CLIPS":
+                                continue
+                            # Sync up to 5 clips per product folder
+                            for clip in item.get("clips", [])[:5]:
+                                tasks.append(_download_one(clip, folder_name))
+
+                        if tasks:
+                            await asyncio.gather(*tasks, return_exceptions=True)
 
                         await catalog_service.scan_clips_directory(session, self.local)
                         lru_cache.evict_if_needed()

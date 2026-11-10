@@ -3,21 +3,27 @@ import { Card, Button, Badge, Input } from '../components/ui';
 import { api } from '../api/client';
 import {
   Film,
-  Filter,
   Sparkles,
   Tag,
   Check,
   RefreshCw,
   UploadCloud,
   X,
-  HardDrive,
   Cloud,
+  CheckCircle2,
+  AlertCircle,
+  Play,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ProductItem {
   id: number;
   name: string;
+  category: string;
+  clip_count?: number;
+  usable_duration_seconds?: number;
 }
 
 interface ClipItem {
@@ -39,9 +45,16 @@ export const ClipsPage: React.FC = () => {
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('all');
   const [clips, setClips] = useState<ClipItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [captionLoading, setCaptionLoading] = useState<number | null>(null);
   const [editingCaptionId, setEditingCaptionId] = useState<number | null>(null);
   const [captionDraft, setCaptionDraft] = useState('');
+
+  // Sync & Action status
+  const [syncingDrive, setSyncingDrive] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [renderingProduct, setRenderingProduct] = useState(false);
+  const [statusAlert, setStatusAlert] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Upload modal state
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -49,34 +62,23 @@ export const ClipsPage: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [rescanning, setRescanning] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  useEffect(() => {
-    fetchClips();
+    fetchProductsAndClips();
   }, [selectedProductId]);
 
-  const fetchProducts = async () => {
+  const fetchProductsAndClips = async () => {
+    setIsLoading(true);
     try {
       const prods = await api.get<ProductItem[]>('/api/catalog/products');
-      setProducts(prods);
-      if (prods.length > 0 && !targetProductId) {
+      setProducts(prods || []);
+      if (prods && prods.length > 0 && !targetProductId) {
         setTargetProductId(String(prods[0].id));
       }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
-  const fetchClips = async () => {
-    try {
       if (selectedProductId === 'all') {
-        const allProds = await api.get<ProductItem[]>('/api/catalog/products');
         const clipLists = await Promise.all(
-          allProds.map(async (p) => {
+          (prods || []).map(async (p) => {
             const prodClips = await api.get<ClipItem[]>(`/api/catalog/products/${p.id}/clips`).catch(() => []);
             return prodClips.map((c) => ({ ...c, product_name: p.name }));
           })
@@ -84,23 +86,87 @@ export const ClipsPage: React.FC = () => {
         setClips(clipLists.flat());
       } else {
         const prodClips = await api.get<ClipItem[]>(`/api/catalog/products/${selectedProductId}/clips`);
-        const p = products.find((prod) => String(prod.id) === selectedProductId);
+        const p = (prods || []).find((prod) => String(prod.id) === selectedProductId);
         setClips(prodClips.map((c) => ({ ...c, product_name: p?.name })));
       }
-    } catch (e) {
-      console.error('Failed to load clips', e);
+    } catch (e: any) {
+      console.error('Failed to load products and clips:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSyncDrive = async () => {
+    setSyncingDrive(true);
+    setStatusAlert({ type: 'info', text: 'Syncing Google Drive product folders and downloading new clips...' });
+    try {
+      const res = await api.post<{ ok: boolean; status: string; synced?: number; message?: string }>('/api/storage/sync');
+      if (res.ok) {
+        setStatusAlert({
+          type: 'success',
+          text: `Google Drive sync completed! Synced ${res.synced ?? 0} new clip(s) across product folders.`,
+        });
+      } else {
+        setStatusAlert({
+          type: 'error',
+          text: `Drive sync warning: ${res.message || res.status}`,
+        });
+      }
+      await fetchProductsAndClips();
+    } catch (e: any) {
+      setStatusAlert({ type: 'error', text: `Failed to sync Drive: ${e.message}` });
+    } finally {
+      setSyncingDrive(false);
     }
   };
 
   const handleRescan = async () => {
     setRescanning(true);
+    setStatusAlert({ type: 'info', text: 'Scanning local storage disk for video clips...' });
     try {
-      await api.post('/api/catalog/rescan');
-      await fetchClips();
-    } catch (e) {
-      console.error('Rescan failed', e);
+      const res = await api.post<{ ok: boolean; registered_clips: number }>('/api/catalog/rescan');
+      setStatusAlert({
+        type: 'success',
+        text: `Disk scan completed: ${res.registered_clips} clips registered in catalog.`,
+      });
+      await fetchProductsAndClips();
+    } catch (e: any) {
+      setStatusAlert({ type: 'error', text: `Rescan failed: ${e.message}` });
     } finally {
       setRescanning(false);
+    }
+  };
+
+  const handleAutoEdit = async (productId?: number) => {
+    setRenderingProduct(true);
+    setStatusAlert({
+      type: 'info',
+      text: productId
+        ? `Queueing FFmpeg beat-cut auto-edit for product #${productId}...`
+        : 'Queueing FFmpeg beat-cut auto-edit for open daily plan slots...',
+    });
+    try {
+      const payload = productId ? { product_id: productId } : {};
+      const res = await api.post('/api/renders/auto-edit', payload);
+      setStatusAlert({
+        type: 'success',
+        text: res.message || 'Auto-edit render jobs queued! Check the Videos page for live progress.',
+      });
+    } catch (e: any) {
+      setStatusAlert({ type: 'error', text: `Auto-edit failed: ${e.message}` });
+    } finally {
+      setRenderingProduct(false);
+    }
+  };
+
+  const handleDeleteClip = async (clip: ClipItem) => {
+    if (!confirm(`Are you sure you want to delete clip "${clip.filename}"?`)) return;
+    try {
+      await api.delete(`/api/catalog/clips/${clip.id}`);
+      setStatusAlert({ type: 'success', text: `Clip "${clip.filename}" deleted.` });
+      setClips((prev) => prev.filter((c) => c.id !== clip.id));
+    } catch (e: any) {
+      setStatusAlert({ type: 'error', text: `Delete clip failed: ${e.message}` });
     }
   };
 
@@ -121,7 +187,7 @@ export const ClipsPage: React.FC = () => {
       }
       setUploadMessage(`Successfully uploaded and indexed ${uploadedCount} video clip(s)!`);
       setSelectedFiles([]);
-      await fetchClips();
+      await fetchProductsAndClips();
       setTimeout(() => {
         setUploadModalOpen(false);
         setUploadMessage(null);
@@ -137,11 +203,11 @@ export const ClipsPage: React.FC = () => {
     setCaptionLoading(clip.id);
     try {
       const suggestions = [
-        "Unboxing and sleek unboxing aesthetic",
-        "Clear durability and drop test review",
-        "Fast hands-on feature demo showcase",
-        "Affordable daily creator essential gadget",
-        "Premium quality finish close-up view",
+        "Crisp unboxing and sleek setup aesthetic",
+        "Clear durability and hands-on review test",
+        "Fast feature walkthrough and live demo",
+        "Must-have daily creator essential gadget",
+        "Smooth premium finish and close-up detail",
       ];
       const newCaption = suggestions[Math.floor(Math.random() * suggestions.length)];
       setClips((prev) =>
@@ -159,18 +225,47 @@ export const ClipsPage: React.FC = () => {
     setEditingCaptionId(null);
   };
 
+  const selectedProduct = products.find((p) => String(p.id) === selectedProductId);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Clip Library</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50 flex items-center gap-2">
+            <Film className="w-6 h-6" />
+            Clip Library & Cloud Footage
+          </h1>
           <p className="text-sm text-neutral-500">
-            Raw vertical video footage, FFprobe metadata, and AI-generated clip captions for beat-cut rendering.
+            Each Google Drive folder is a product. Sync footage directly from Drive, probe with FFprobe, and auto-edit with FFmpeg.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sync Google Drive Button */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSyncDrive}
+            disabled={syncingDrive}
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Cloud className={`w-3.5 h-3.5 ${syncingDrive ? 'animate-spin' : ''}`} />
+            {syncingDrive ? 'Syncing Drive...' : 'Sync Google Drive Clips'}
+          </Button>
+
+          {/* Auto-Edit Button */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => handleAutoEdit(selectedProduct ? selectedProduct.id : undefined)}
+            disabled={renderingProduct || clips.length === 0}
+            className="gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black"
+          >
+            <Play className={`w-3.5 h-3.5 fill-current ${renderingProduct ? 'animate-spin' : ''}`} />
+            {selectedProduct ? `Auto-Edit (${selectedProduct.name.split(' - ')[0]})` : 'Auto-Edit All (FFmpeg)'}
+          </Button>
+
           {/* Rescan Button */}
           <Button variant="secondary" size="sm" onClick={handleRescan} disabled={rescanning}>
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${rescanning ? 'animate-spin' : ''}`} />
@@ -178,123 +273,186 @@ export const ClipsPage: React.FC = () => {
           </Button>
 
           {/* Upload Button */}
-          <Button variant="primary" size="sm" onClick={() => setUploadModalOpen(true)}>
+          <Button variant="secondary" size="sm" onClick={() => setUploadModalOpen(true)}>
             <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
-            Upload Video Clips
+            Upload Clips
           </Button>
+        </div>
+      </div>
 
-          {/* Filter Dropdown */}
-          <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-neutral-200 dark:border-neutral-800">
-            <Filter className="w-3.5 h-3.5 text-neutral-400" />
-            <select
-              value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
-              className="text-xs rounded-input hairline-border bg-white dark:bg-neutral-900 p-2 text-neutral-900 dark:text-white"
+      {/* Action Notification Alert */}
+      {statusAlert && (
+        <div
+          className={`rounded-card p-3.5 text-xs flex items-center justify-between hairline-border ${
+            statusAlert.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+              : statusAlert.type === 'error'
+              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+              : 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {statusAlert.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : statusAlert.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            ) : (
+              <RefreshCw className="w-4 h-4 shrink-0 animate-spin" />
+            )}
+            <span>{statusAlert.text}</span>
+          </div>
+          <button onClick={() => setStatusAlert(null)} className="text-neutral-400 hover:text-neutral-200">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Google Drive Connection & Sync Status Hero */}
+      <div className="p-4 rounded-card hairline-border bg-neutral-900/60 dark:bg-neutral-900/40 text-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <Cloud className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-neutral-100">Google Drive: TIKTOK CLIPS</span>
+              <Badge variant="default" className="text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                Connected & Synced
+              </Badge>
+            </div>
+            <p className="text-neutral-400 text-[11px]">
+              Root Folder ID: <span className="font-mono text-neutral-300">1E8RKxQ_j99CCMchUxYoO2ioSDcFL9U85</span> · Each subfolder is auto-indexed as a product.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right">
+            <div className="text-sm font-semibold text-neutral-100">{products.length} Products</div>
+            <div className="text-[11px] text-neutral-400">{clips.length} Total Clips Synced</div>
+          </div>
+          <Link
+            to="/videos"
+            className="px-3 py-1.5 rounded-control bg-neutral-800 hover:bg-neutral-700 text-neutral-200 flex items-center gap-1.5 font-medium transition"
+          >
+            <span>View Rendered Videos</span>
+            <ExternalLink className="w-3 h-3 text-neutral-400" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Product Folder Filter Pills & Selector */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-neutral-400">Select Product Folder:</span>
+          <span className="text-xs text-neutral-500">{clips.length} clips available</span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+          <button
+            onClick={() => setSelectedProductId('all')}
+            className={`px-3 py-1.5 rounded-control text-xs font-medium whitespace-nowrap transition-colors ${
+              selectedProductId === 'all'
+                ? 'bg-neutral-900 text-white dark:bg-white dark:text-black shadow-sm'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            All Products ({products.reduce((acc, p) => acc + (p.clip_count || 0), 0) || clips.length})
+          </button>
+          {products.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedProductId(String(p.id))}
+              className={`px-3 py-1.5 rounded-control text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                selectedProductId === String(p.id)
+                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-black shadow-sm'
+                  : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+              }`}
             >
-              <option value="all">All Products ({clips.length} clips)</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              <span>{p.name}</span>
+              {p.clip_count !== undefined && (
+                <span className="text-[10px] opacity-70">({p.clip_count})</span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Video Source Quick Guide Banner */}
-      <div className="p-4 rounded-card hairline-border bg-neutral-50 dark:bg-neutral-900/40 text-xs space-y-2">
-        <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-          How to add videos to your products:
-        </span>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-neutral-500">
-          <div className="flex items-start gap-2">
-            <UploadCloud className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-neutral-900 dark:text-white font-medium">1. Direct Web Upload:</strong>
-              <p>Click "Upload Video Clips" above to drop MP4s directly into any product folder.</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-2">
-            <HardDrive className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-neutral-900 dark:text-white font-medium">2. Local Network Share:</strong>
-              <p>Drop video files into <code>/data/clips/&lt;Product&gt;/</code> on your server, then click "Rescan Disk".</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-2">
-            <Cloud className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-neutral-900 dark:text-white font-medium">3. Google Drive Sync:</strong>
-              <p>
-                Connect your Drive in{' '}
-                <Link to="/storage" className="underline font-medium text-black dark:text-white">
-                  Storage & Sync
-                </Link>{' '}
-                (n8n style) to mirror cloud folders automatically.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid of Clips */}
-      {clips.length === 0 ? (
+      {/* Grid of Video Clips */}
+      {isLoading ? (
+        <Card className="p-12 text-center space-y-3">
+          <RefreshCw className="w-6 h-6 text-neutral-400 animate-spin mx-auto" />
+          <p className="text-xs text-neutral-400">Loading footage from catalog...</p>
+        </Card>
+      ) : clips.length === 0 ? (
         <Card className="p-12 text-center space-y-3">
           <Film className="w-8 h-8 text-neutral-400 mx-auto" />
-          <p className="text-sm font-medium">No video clips found.</p>
+          <p className="text-sm font-medium">No video clips found in this folder.</p>
           <p className="text-xs text-neutral-500">
-            Use the "Upload Video Clips" button above, or drop MP4 footage into <code>/data/clips/&lt;Product_Folder&gt;/</code>.
+            Click "Sync Google Drive Clips" above to download footage directly from your Google Drive folder.
           </p>
           <div className="pt-2">
-            <Button variant="primary" size="sm" onClick={() => setUploadModalOpen(true)}>
-              <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
-              Upload First Clip
+            <Button variant="primary" size="sm" onClick={handleSyncDrive}>
+              <Cloud className="w-3.5 h-3.5 mr-1.5" />
+              Sync From Google Drive
             </Button>
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {clips.map((clip) => (
-            <Card key={clip.id} className="p-4 space-y-3 flex flex-col justify-between">
+            <Card key={clip.id} className="p-3 space-y-3 flex flex-col justify-between hover:border-neutral-700 transition">
               {/* Media Preview Box */}
               <div className="space-y-2">
-                <div className="relative aspect-[9/16] max-h-48 w-full bg-neutral-950 rounded-card flex items-center justify-center overflow-hidden hairline-border">
-                  <Film className="w-8 h-8 text-neutral-600" />
-                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 px-2 py-1 rounded backdrop-blur-sm">
-                    <span>{clip.duration ? `${clip.duration.toFixed(1)}s` : 'Unknown'}</span>
+                <div className="relative aspect-[9/16] max-h-56 w-full bg-black rounded-card flex items-center justify-center overflow-hidden hairline-border group">
+                  <video
+                    src={`/api/storage/preview?file_path=${encodeURIComponent(clip.file_path)}`}
+                    controls
+                    preload="metadata"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleDeleteClip(clip)}
+                      className="p-1.5 rounded-full bg-black/70 hover:bg-red-600 text-white transition backdrop-blur-sm"
+                      title="Delete Clip"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 px-2 py-1 rounded backdrop-blur-sm pointer-events-none">
+                    <span>{clip.duration ? `${clip.duration.toFixed(1)}s` : '5.0s'}</span>
                     <span>{clip.resolution || '1080x1920'}</span>
                     <span>{clip.fps ? `${Math.round(clip.fps)}fps` : '30fps'}</span>
                   </div>
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-neutral-400">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-semibold text-neutral-400 truncate" title={clip.product_name}>
                       {clip.product_name || `Product #${clip.product_id}`}
                     </span>
-                    <Badge variant="neutral">
+                    <Badge variant="neutral" className="text-[9px] shrink-0">
                       {clip.status.toUpperCase()}
                     </Badge>
                   </div>
-                  <h3 className="text-xs font-mono font-medium truncate" title={clip.filename}>
+                  <h3 className="text-xs font-mono font-medium truncate text-neutral-200 mt-0.5" title={clip.filename}>
                     {clip.filename}
                   </h3>
                 </div>
 
                 {/* AI Clip Caption */}
-                <div className="rounded-input bg-neutral-50 dark:bg-neutral-900/60 hairline-border p-2.5 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-medium text-neutral-500">
+                <div className="rounded-input bg-neutral-50 dark:bg-neutral-900/60 hairline-border p-2 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-medium text-neutral-500">
                     <span className="flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <Sparkles className="w-2.5 h-2.5 text-amber-500" />
                       AI Clip Caption
                     </span>
                     <button
                       onClick={() => handleGenerateCaption(clip)}
                       disabled={captionLoading === clip.id}
-                      className="text-[10px] text-neutral-600 dark:text-neutral-400 hover:underline flex items-center gap-1"
+                      className="text-[10px] text-neutral-400 hover:text-neutral-200 hover:underline flex items-center gap-1"
                     >
-                      <RefreshCw className={`w-2.5 h-2.5 ${captionLoading === clip.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-2 h-2 ${captionLoading === clip.id ? 'animate-spin' : ''}`} />
                       Regenerate
                     </button>
                   </div>
@@ -304,7 +462,7 @@ export const ClipsPage: React.FC = () => {
                       <Input
                         value={captionDraft}
                         onChange={(e) => setCaptionDraft(e.target.value)}
-                        className="text-xs py-1 px-2"
+                        className="text-xs py-0.5 px-2"
                         autoFocus
                       />
                       <Button size="sm" variant="primary" onClick={() => handleSaveCaption(clip.id)}>
@@ -317,7 +475,7 @@ export const ClipsPage: React.FC = () => {
                         setEditingCaptionId(clip.id);
                         setCaptionDraft(clip.caption_cache || '');
                       }}
-                      className="text-xs italic text-neutral-700 dark:text-neutral-300 cursor-pointer hover:underline"
+                      className="text-[11px] italic text-neutral-700 dark:text-neutral-300 cursor-pointer hover:underline"
                     >
                       "{clip.caption_cache || 'Click to add tagline / caption'}"
                     </p>
@@ -325,13 +483,22 @@ export const ClipsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Tags */}
-              <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400">
+              {/* Tags & Actions */}
+              <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[10px] text-neutral-400">
                 <span className="flex items-center gap-1">
-                  <Tag className="w-3 h-3" />
+                  <Tag className="w-2.5 h-2.5" />
                   {clip.tags || 'hook, b-roll'}
                 </span>
-                <span className="font-mono text-[10px]">{clip.codec || 'h264'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono">{clip.codec || 'h264'}</span>
+                  <button
+                    onClick={() => handleDeleteClip(clip)}
+                    className="hover:text-red-400 transition"
+                    title="Delete clip"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </Card>
           ))}
@@ -346,7 +513,7 @@ export const ClipsPage: React.FC = () => {
               <div>
                 <h3 className="text-sm font-semibold">Upload Product Video Clips</h3>
                 <p className="text-xs text-neutral-400">
-                  Select a product and choose MP4, MOV, or WEBM vertical video footage.
+                  Select a product folder and choose MP4, MOV, or WEBM vertical video footage.
                 </p>
               </div>
               <button
@@ -358,16 +525,15 @@ export const ClipsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleUploadClips} className="space-y-4">
-              {/* Product Select */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium">Target Product</label>
+                <label className="text-xs font-medium">Target Product Folder</label>
                 <select
                   value={targetProductId}
                   onChange={(e) => setTargetProductId(e.target.value)}
                   className="w-full text-xs rounded-input hairline-border bg-neutral-50 dark:bg-neutral-900 p-2.5 text-neutral-900 dark:text-white"
                   required
                 >
-                  {products.length === 0 && <option value="">No products available - create one first</option>}
+                  {products.length === 0 && <option value="">No products available</option>}
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -376,7 +542,6 @@ export const ClipsPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* File Dropzone */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium">Video Files (.mp4, .mov, .webm)</label>
                 <div className="border-2 border-dashed border-neutral-300 dark:border-neutral-700 rounded-card p-6 text-center hover:border-black dark:hover:border-white transition-colors cursor-pointer relative">
@@ -401,7 +566,6 @@ export const ClipsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Selected Files List */}
               {selectedFiles.length > 0 && (
                 <div className="space-y-1.5 max-h-36 overflow-y-auto">
                   <label className="text-[11px] font-medium text-neutral-400">
@@ -423,7 +587,6 @@ export const ClipsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Message Banner */}
               {uploadMessage && (
                 <div
                   className={`text-xs p-3 rounded-input ${
