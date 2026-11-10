@@ -39,6 +39,21 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database schema initialized.")
 
+    # Initialize default admin user if none exists
+    async with AsyncSessionLocal() as init_sess:
+        from sqlalchemy import select
+        from backend.app.models.models import User
+        from backend.app.core.security import hash_password
+        import os
+        user_stmt = select(User).where(User.username == "admin")
+        admin_user = (await init_sess.execute(user_stmt)).scalar_one_or_none()
+        if not admin_user:
+            default_pwd = os.getenv("ADMIN_PASSWORD", "admin123")
+            admin_user = User(username="admin", password_hash=hash_password(default_pwd))
+            init_sess.add(admin_user)
+            await init_sess.commit()
+            logger.info("Default admin user initialized.", username="admin")
+
     if settings.DEMO_MODE:
         logger.info("DEMO_MODE active: seeding synthetic creator dataset...")
         async with AsyncSessionLocal() as demo_sess:

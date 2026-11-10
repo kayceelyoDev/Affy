@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Table } from '../components/ui';
+import { api } from '../api/client';
 
 interface PostItem {
   id: number;
@@ -46,9 +47,8 @@ export const VideosPage: React.FC = () => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
-      const res = await fetch(`/api/posts?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await api.get<any>(`/api/posts?${params.toString()}`);
+      if (data) {
         setPosts(data.posts || []);
         setTotalCount(data.total_count || 0);
         setTotalPublished(data.total_published || 0);
@@ -75,13 +75,8 @@ export const VideosPage: React.FC = () => {
   const handleRegenerate = async (id: number) => {
     setRegeneratingId(id);
     try {
-      const res = await fetch(`/api/posts/${id}/regenerate-caption`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        await fetchPosts();
-      }
+      await api.post(`/api/posts/${id}/regenerate-caption`);
+      await fetchPosts();
     } catch (e) {
       console.error('Failed to regenerate caption:', e);
     } finally {

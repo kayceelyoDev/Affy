@@ -8,6 +8,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Table } from '../components/ui';
+import { api } from '../api/client';
 
 interface ScheduleItem {
   id: string;
@@ -31,16 +32,13 @@ export const SchedulesPage: React.FC = () => {
   const fetchSchedules = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/schedules');
-      if (res.ok) {
-        const data: ScheduleItem[] = await res.json();
-        setSchedules(data || []);
-        const drafts: Record<string, string> = {};
-        (data || []).forEach((s) => {
-          drafts[s.id] = s.cron_expression;
-        });
-        setCronDrafts(drafts);
-      }
+      const data = await api.get<ScheduleItem[]>('/api/schedules');
+      setSchedules(data || []);
+      const drafts: Record<string, string> = {};
+      (data || []).forEach((s) => {
+        drafts[s.id] = s.cron_expression;
+      });
+      setCronDrafts(drafts);
     } catch (e) {
       console.error('Failed to load schedules:', e);
     } finally {
@@ -59,14 +57,8 @@ export const SchedulesPage: React.FC = () => {
   const handleToggle = async (item: ScheduleItem) => {
     const newEnabled = !item.enabled;
     try {
-      const res = await fetch(`/api/schedules/${item.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: newEnabled }),
-      });
-      if (res.ok) {
-        await fetchSchedules();
-      }
+      await api.put(`/api/schedules/${item.id}`, { enabled: newEnabled });
+      await fetchSchedules();
     } catch (e) {
       console.error('Failed to toggle schedule:', e);
     }
@@ -75,16 +67,10 @@ export const SchedulesPage: React.FC = () => {
   const handleSaveCron = async (id: string) => {
     const cron = cronDrafts[id];
     try {
-      const res = await fetch(`/api/schedules/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cron_expression: cron }),
-      });
-      if (res.ok) {
-        setSavedJobId(id);
-        setTimeout(() => setSavedJobId(null), 2000);
-        await fetchSchedules();
-      }
+      await api.put(`/api/schedules/${id}`, { cron_expression: cron });
+      setSavedJobId(id);
+      setTimeout(() => setSavedJobId(null), 2000);
+      await fetchSchedules();
     } catch (e) {
       console.error('Failed to save cron:', e);
     }
@@ -93,10 +79,8 @@ export const SchedulesPage: React.FC = () => {
   const handleRunNow = async (id: string) => {
     setRunningJobId(id);
     try {
-      const res = await fetch(`/api/schedules/${id}/run`, { method: 'POST' });
-      if (res.ok) {
-        await fetchSchedules();
-      }
+      await api.post(`/api/schedules/${id}/run`);
+      await fetchSchedules();
     } catch (e) {
       console.error('Failed to run schedule now:', e);
     } finally {
@@ -107,7 +91,7 @@ export const SchedulesPage: React.FC = () => {
   const handleRunChain = async () => {
     setIsChainRunning(true);
     try {
-      await fetch('/api/schedules/chain', { method: 'POST' });
+      await api.post('/api/schedules/chain');
       await fetchSchedules();
     } catch (e) {
       console.error('Failed to run chain:', e);

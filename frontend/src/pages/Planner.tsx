@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button, Card, Badge } from "../components/ui";
+import { api } from "../api/client";
 
 interface PlanSlotItem {
   id: number;
@@ -42,10 +43,8 @@ export const PlannerPage: React.FC = () => {
 
   const fetchTodayPlan = async () => {
     try {
-      const res = await fetch("/api/planner/today");
-      if (res.ok) {
-        setPlan(await res.json());
-      }
+      const data = await api.get<PlanResponse>("/api/planner/today");
+      setPlan(data);
     } catch (err) {
       console.error("Failed to fetch daily plan", err);
     }
@@ -59,21 +58,12 @@ export const PlannerPage: React.FC = () => {
     setGenerating(true);
     setActionMsg(null);
     try {
-      const res = await fetch("/api/planner/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": "client-token",
-        },
-        body: JSON.stringify({
-          dry_run: dryRunMode,
-          auto_approve: autoApproveMode,
-          force_regenerate: true,
-        }),
+      const data = await api.post("/api/planner/generate", {
+        dry_run: dryRunMode,
+        auto_approve: autoApproveMode,
+        force_regenerate: true,
       });
 
-      if (!res.ok) throw new Error("Plan generation failed");
-      const data = await res.json();
       setPlan(data);
       setActionMsg(
         dryRunMode
@@ -89,13 +79,8 @@ export const PlannerPage: React.FC = () => {
 
   const handleToggleLock = async (slotId: number) => {
     try {
-      const res = await fetch(`/api/planner/slots/${slotId}/lock`, {
-        method: "POST",
-        headers: { "X-CSRF-Token": "client-token" },
-      });
-      if (res.ok) {
-        fetchTodayPlan();
-      }
+      await api.post(`/api/planner/slots/${slotId}/lock`);
+      fetchTodayPlan();
     } catch (err) {
       console.error("Failed to toggle slot lock", err);
     }
@@ -103,14 +88,9 @@ export const PlannerPage: React.FC = () => {
 
   const handleApproveAll = async () => {
     try {
-      const res = await fetch("/api/planner/approve", {
-        method: "POST",
-        headers: { "X-CSRF-Token": "client-token" },
-      });
-      if (res.ok) {
-        setActionMsg("All slots approved for rendering and Buffer publication.");
-        fetchTodayPlan();
-      }
+      await api.post("/api/planner/approve");
+      setActionMsg("All slots approved for rendering and Buffer publication.");
+      fetchTodayPlan();
     } catch (err) {
       console.error("Failed to approve all slots", err);
     }

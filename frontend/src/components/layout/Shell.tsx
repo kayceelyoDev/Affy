@@ -21,8 +21,10 @@ import {
   Sun,
   Moon,
   Search,
+  LogOut,
 } from 'lucide-react';
 import { cn, Button } from '../ui';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavItem {
   name: string;
@@ -53,6 +55,7 @@ export const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [dark, setDark] = useState(true);
   const [cmdOpen, setCmdOpen] = useState(false);
   const location = useLocation();
+  const { user, logout, setLoginModalOpen } = useAuth();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -184,10 +187,30 @@ export const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Connected
-            </span>
+            {user?.authenticated ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {user.username}
+                </span>
+                <button
+                  onClick={logout}
+                  className="text-xs text-neutral-400 hover:text-black dark:hover:text-white p-1 rounded"
+                  title="Sign out"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setLoginModalOpen(true)}
+                className="text-xs py-1 px-2.5"
+              >
+                Sign In
+              </Button>
+            )}
           </div>
         </header>
 

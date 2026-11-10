@@ -92,7 +92,7 @@ export const StatusDot: React.FC<StatusDotProps> = ({ status, grayscale = false,
 
 // --- BADGE ---
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'secondary' | 'outline' | 'warning' | 'destructive';
+  variant?: 'default' | 'secondary' | 'outline' | 'warning' | 'destructive' | 'neutral';
 }
 
 export const Badge: React.FC<BadgeProps> = ({ children, variant = 'default', className, ...props }) => {
@@ -102,6 +102,7 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'default', cla
     outline: 'border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300',
     warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
     destructive: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20',
+    neutral: 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-700',
   };
 
   return (

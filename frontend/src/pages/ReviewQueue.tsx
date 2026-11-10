@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Check, X, RefreshCw, Edit3 } from "lucide-react";
 import { Button, Card, Badge, Input } from "../components/ui";
+import { api } from "../api/client";
 
 interface ReviewItem {
   extraction_id: number;
@@ -34,15 +35,12 @@ export const ReviewQueuePage: React.FC = () => {
   const fetchQueue = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/ingest/review-queue");
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items || []);
-        if (data.items && data.items.length > 0) {
-          selectItem(data.items[0]);
-        } else {
-          setActiveItem(null);
-        }
+      const data = await api.get<any>("/api/ingest/review-queue");
+      setItems(data.items || []);
+      if (data.items && data.items.length > 0) {
+        selectItem(data.items[0]);
+      } else {
+        setActiveItem(null);
       }
     } catch (err) {
       console.error("Failed to load review queue", err);
@@ -73,20 +71,7 @@ export const ReviewQueuePage: React.FC = () => {
   const handleApprove = async () => {
     if (!activeItem) return;
     try {
-      const res = await fetch(`/api/ingest/review-queue/${activeItem.extraction_id}/approve`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": "client-token",
-        },
-        body: JSON.stringify(editForm),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Approval failed");
-      }
-
+      await api.post(`/api/ingest/review-queue/${activeItem.extraction_id}/approve`, editForm);
       setActionMsg(`Order ${editForm.order_id} approved and saved.`);
       fetchQueue();
     } catch (err: any) {
@@ -97,14 +82,7 @@ export const ReviewQueuePage: React.FC = () => {
   const handleReject = async () => {
     if (!activeItem) return;
     try {
-      const res = await fetch(`/api/ingest/review-queue/${activeItem.extraction_id}/reject`, {
-        method: "POST",
-        headers: {
-          "X-CSRF-Token": "client-token",
-        },
-      });
-
-      if (!res.ok) throw new Error("Rejection failed");
+      await api.post(`/api/ingest/review-queue/${activeItem.extraction_id}/reject`);
       setActionMsg(`Extraction ${activeItem.extraction_id} rejected.`);
       fetchQueue();
     } catch (err: any) {

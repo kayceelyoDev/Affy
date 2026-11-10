@@ -9,6 +9,7 @@ import {
   Play,
 } from 'lucide-react';
 import { Button, Card, Badge, Table } from '../components/ui';
+import { api } from '../api/client';
 
 interface LogItem {
   id?: number;
@@ -40,11 +41,8 @@ export const RunsPage: React.FC = () => {
   const fetchRuns = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/runs?limit=50');
-      if (res.ok) {
-        const data = await res.json();
-        setRuns(data || []);
-      }
+      const data = await api.get<RunItem[]>('/api/runs?limit=50');
+      setRuns(data || []);
     } catch (e) {
       console.error('Failed to load runs:', e);
     } finally {
@@ -61,14 +59,11 @@ export const RunsPage: React.FC = () => {
   const runChain = async () => {
     setIsChainRunning(true);
     try {
-      const res = await fetch('/api/schedules/chain', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.run_id) {
-          openLogs(data.run_id);
-        }
-        await fetchRuns();
+      const data = await api.post('/api/schedules/chain');
+      if (data && data.run_id) {
+        openLogs(data.run_id);
       }
+      await fetchRuns();
     } catch (e) {
       console.error('Failed to trigger chain:', e);
     } finally {

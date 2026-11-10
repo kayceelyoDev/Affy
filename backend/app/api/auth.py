@@ -21,6 +21,10 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 class UserResponse(BaseModel):
     username: str
     authenticated: bool
@@ -91,12 +95,36 @@ async def logout(response: Response):
     return {"ok": True}
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
+async def get_me(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     token = request.cookies.get("session_token")
-    csrf_token = request.cookies.get("csrf_token") or generate_csrf_token()
+    csrf_token = request.cookies.get("csrf_token")
+    if not csrf_token:
+        csrf_token = generate_csrf_token()
+        response.set_cookie(
+            key="csrf_token",
+            value=csrf_token,
+            max_age=settings.SESSION_MAX_AGE_SECONDS,
+            httponly=False,
+            samesite="lax",
+            secure=False,
+        )
     if not token:
         return UserResponse(username="", authenticated=False, csrf_token=csrf_token)
     username = verify_session_token(token)
     if not username:
         return UserResponse(username="", authenticated=False, csrf_token=csrf_token)
     return UserResponse(username=username, authenticated=True, csrf_token=csrf_token)
+
+@router.post("/change-password")
+async def change_password(
+    req: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not verify_password(current_user.password_hash, req.old_password):
+        raise HTTPException(status_code=400, detail="Current password incorrect")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    current_user.password_hash = hash_password(req.new_password)
+    await db.commit()
+    return {"ok": True, "message": "Password updated successfully"}

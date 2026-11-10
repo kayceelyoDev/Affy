@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, ShoppingBag, DollarSign, Clock, CheckCircle2 } from "lucide-react";
 import { Button, Card, Badge, Table } from "../components/ui";
+import { api } from "../api/client";
 
 interface OrderItem {
   id: number;
@@ -41,18 +42,17 @@ export const OrdersPage: React.FC = () => {
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (statusFilter) url += `&status=${encodeURIComponent(statusFilter)}`;
 
-      const [resOrders, resSummary] = await Promise.all([
-        fetch(url),
-        fetch("/api/orders/summary"),
+      const [ordersData, summaryData] = await Promise.all([
+        api.get<any>(url),
+        api.get<any>("/api/orders/summary"),
       ]);
 
-      if (resOrders.ok) {
-        const data = await resOrders.json();
-        setOrders(data.items || []);
-        setTotal(data.total || 0);
+      if (ordersData) {
+        setOrders(ordersData.items || []);
+        setTotal(ordersData.total || 0);
       }
-      if (resSummary.ok) {
-        setSummary(await resSummary.json());
+      if (summaryData) {
+        setSummary(summaryData);
       }
     } catch (err) {
       console.error("Failed to load orders", err);

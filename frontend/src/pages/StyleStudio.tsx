@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Card, Input, Badge } from '../components/ui';
 import { Play, Copy, Sliders, Video } from 'lucide-react';
+import { api } from '../api/client';
 
 interface StyleSpecData {
   id: string;
@@ -26,10 +27,9 @@ export const StyleStudioPage: React.FC = () => {
 
   const fetchStyles = async () => {
     try {
-      const res = await fetch('/api/styles');
-      const data = await res.json();
-      setStyles(data);
-      if (data.length > 0 && !selectedStyle) {
+      const data = await api.get<StyleSpecData[]>('/api/styles');
+      setStyles(data || []);
+      if (data && data.length > 0 && !selectedStyle) {
         setSelectedStyle(data[0]);
       }
     } catch (err) {
@@ -39,14 +39,8 @@ export const StyleStudioPage: React.FC = () => {
 
   const handleDuplicate = async (id: string) => {
     try {
-      const csrf = getCsrfToken();
-      const res = await fetch(`/api/styles/${id}/duplicate`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrf },
-      });
-      if (res.ok) {
-        fetchStyles();
-      }
+      await api.post(`/api/styles/${id}/duplicate`);
+      fetchStyles();
     } catch (err) {
       console.error(err);
     }
@@ -56,22 +50,13 @@ export const StyleStudioPage: React.FC = () => {
     if (!selectedStyle) return;
     try {
       setPreviewLoading(true);
-      const csrf = getCsrfToken();
-      const res = await fetch('/api/styles/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrf,
-        },
-        body: JSON.stringify({
-          style_id: selectedStyle.id,
-          title: titleText,
-          subtitle: subtitleText,
-          sample_duration: 5.0,
-        }),
+      const data = await api.post('/api/styles/preview', {
+        style_id: selectedStyle.id,
+        title: titleText,
+        subtitle: subtitleText,
+        sample_duration: 5.0,
       });
-      const data = await res.json();
-      if (data.preview_url) {
+      if (data && data.preview_url) {
         setPreviewUrl(data.preview_url);
       }
     } catch (err) {
@@ -79,11 +64,6 @@ export const StyleStudioPage: React.FC = () => {
     } finally {
       setPreviewLoading(false);
     }
-  };
-
-  const getCsrfToken = () => {
-    const match = document.cookie.match(/csrf_token=([^;]+)/);
-    return match ? match[1] : '';
   };
 
   return (

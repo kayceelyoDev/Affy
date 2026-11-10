@@ -13,6 +13,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { Button, Card, Badge, Table } from "../components/ui";
+import { api } from "../api/client";
 
 interface AnalyticsOverview {
   total_views: number;
@@ -63,19 +64,17 @@ export const AnalyticsPage: React.FC = () => {
 
   const fetchAnalytics = async () => {
     try {
-      const [oRes, sRes, stRes] = await Promise.all([
-        fetch("/api/analytics/overview"),
-        fetch("/api/analytics/scorecards"),
-        fetch("/api/analytics/styles"),
+      const [oData, scData, stData] = await Promise.all([
+        api.get<AnalyticsOverview>("/api/analytics/overview").catch(() => null),
+        api.get<any>("/api/analytics/scorecards").catch(() => null),
+        api.get<any>("/api/analytics/styles").catch(() => null),
       ]);
 
-      if (oRes.ok) setOverview(await oRes.json());
-      if (sRes.ok) {
-        const scData = await sRes.json();
+      if (oData) setOverview(oData);
+      if (scData) {
         setScorecards(scData.scorecards || []);
       }
-      if (stRes.ok) {
-        const stData = await stRes.json();
+      if (stData) {
         setStyles(stData.styles || []);
       }
     } catch (err) {
@@ -90,15 +89,8 @@ export const AnalyticsPage: React.FC = () => {
   const handleRunSundaySync = async () => {
     setScoringTriggered(true);
     try {
-      await fetch("/api/analytics/scorecards/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": "client-token",
-        },
-        body: JSON.stringify({ period: "weekly", profile_version: "v1" }),
-      });
-      fetchAnalytics();
+      await api.post("/api/analytics/scorecards/run", { period: "weekly", profile_version: "v1" });
+      await fetchAnalytics();
     } catch (err) {
       console.error("Scoring run failed", err);
     } finally {

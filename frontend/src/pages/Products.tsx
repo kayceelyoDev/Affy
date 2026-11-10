@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Badge } from '../components/ui';
+import { api } from '../api/client';
 import { Plus, Trash2, Edit2, Check, X, Film, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface ProductItem {
@@ -43,51 +44,28 @@ export const ProductsPage: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch('/api/catalog/products');
-      if (res.ok) {
-        setProducts(await res.json());
-      }
-    } catch (e) {
+      const data = await api.get<ProductItem[]>('/api/catalog/products');
+      setProducts(data);
+    } catch (e: any) {
       console.error(e);
     }
   };
 
   const fetchPendingAliases = async () => {
     try {
-      const res = await fetch('/api/catalog/aliases?status_filter=pending_review');
-      if (res.ok) {
-        setPendingAliases(await res.json());
-      }
-    } catch (e) {
+      const data = await api.get<AliasItem[]>('/api/catalog/aliases?status_filter=pending_review');
+      setPendingAliases(data);
+    } catch (e: any) {
       console.error(e);
     }
-  };
-
-  const getCsrf = () => {
-    return document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('csrf_token='))
-      ?.split('=')[1] || '';
   };
 
   const handleRename = async (id: number) => {
     if (!editName.trim()) return;
     try {
-      const res = await fetch(`/api/catalog/products/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': getCsrf(),
-        },
-        body: JSON.stringify({ name: editName.trim() }),
-      });
-      if (res.ok) {
-        setEditingId(null);
-        await fetchProducts();
-      } else {
-        const err = await res.json();
-        setErrorBanner(err.detail || 'Rename failed');
-      }
+      await api.put(`/api/catalog/products/${id}`, { name: editName.trim() });
+      setEditingId(null);
+      await fetchProducts();
     } catch (e: any) {
       setErrorBanner(e.message);
     }
@@ -101,16 +79,8 @@ export const ProductsPage: React.FC = () => {
     if (!confirm(`Are you sure you want to delete "${p.name}"?`)) return;
 
     try {
-      const res = await fetch(`/api/catalog/products/${p.id}`, {
-        method: 'DELETE',
-        headers: { 'X-CSRF-Token': getCsrf() },
-      });
-      if (res.ok) {
-        await fetchProducts();
-      } else {
-        const err = await res.json();
-        setErrorBanner(err.detail || 'Delete failed');
-      }
+      await api.delete(`/api/catalog/products/${p.id}`);
+      await fetchProducts();
     } catch (e: any) {
       setErrorBanner(e.message);
     }
@@ -119,24 +89,16 @@ export const ProductsPage: React.FC = () => {
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+    setErrorBanner(null);
     try {
-      const res = await fetch('/api/catalog/products', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': getCsrf(),
-        },
-        body: JSON.stringify({
-          name: newName.trim(),
-          category: newCategory,
-          commission_rate: parseFloat(newCommission) || 0.15,
-        }),
+      await api.post('/api/catalog/products', {
+        name: newName.trim(),
+        category: newCategory,
+        commission_rate: parseFloat(newCommission) || 0.15,
       });
-      if (res.ok) {
-        setShowNewModal(false);
-        setNewName('');
-        await fetchProducts();
-      }
+      setShowNewModal(false);
+      setNewName('');
+      await fetchProducts();
     } catch (e: any) {
       setErrorBanner(e.message);
     }
@@ -145,15 +107,10 @@ export const ProductsPage: React.FC = () => {
   const handleRescan = async () => {
     setIsScanning(true);
     try {
-      const res = await fetch('/api/catalog/catalog/rescan', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': getCsrf() },
-      });
-      if (res.ok) {
-        await fetchProducts();
-      }
-    } catch (e) {
-      console.error(e);
+      await api.post('/api/catalog/catalog/rescan');
+      await fetchProducts();
+    } catch (e: any) {
+      setErrorBanner(e.message);
     } finally {
       setIsScanning(false);
     }
@@ -161,15 +118,10 @@ export const ProductsPage: React.FC = () => {
 
   const handleLinkAlias = async (aliasId: number, productId: number) => {
     try {
-      const res = await fetch(`/api/catalog/aliases/${aliasId}/link?product_id=${productId}`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': getCsrf() },
-      });
-      if (res.ok) {
-        await fetchPendingAliases();
-      }
-    } catch (e) {
-      console.error(e);
+      await api.post(`/api/catalog/aliases/${aliasId}/link?product_id=${productId}`);
+      await fetchPendingAliases();
+    } catch (e: any) {
+      setErrorBanner(e.message);
     }
   };
 

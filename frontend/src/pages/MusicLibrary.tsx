@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Card, Input, Badge } from '../components/ui';
+import { api } from '../api/client';
 import { Music, Download, Play, Pause, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface TrackItem {
@@ -41,19 +42,13 @@ export const MusicLibraryPage: React.FC = () => {
   const fetchTracks = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/music');
-      const data = await res.json();
-      setTracks(data);
+      const data = await api.get<TrackItem[]>('/api/music');
+      setTracks(data || []);
     } catch (err) {
       console.error('Failed to load music tracks', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const getCsrfToken = () => {
-    const match = document.cookie.match(/csrf_token=([^;]+)/);
-    return match ? match[1] : '';
   };
 
   const handlePlayToggle = (track: TrackItem) => {
@@ -80,24 +75,11 @@ export const MusicLibraryPage: React.FC = () => {
     try {
       setDownloading(true);
       setDownloadError(null);
-      const csrf = getCsrfToken();
-      const res = await fetch('/api/music/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrf,
-        },
-        body: JSON.stringify({
-          url: downloadUrl,
-          title: downloadTitle || undefined,
-          safe_to_use: false, // Downloaded audio defaults to caution flag
-        }),
+      await api.post('/api/music/download', {
+        url: downloadUrl,
+        title: downloadTitle || undefined,
+        safe_to_use: false,
       });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Download failed');
-      }
 
       setShowDownloadModal(false);
       setDownloadUrl('');

@@ -1,8 +1,8 @@
 # Build Status: Affiliate Autopilot
 
 **Current Mode:** Continuous (`CHECKPOINT_MODE = continuous`)  
-**Last Updated:** 2026-11-10T22:38:00+08:00  
-**Active Batch:** COMPLETE (All Batches B0 to B11 Finished & Verified)
+**Last Updated:** 2026-11-10T23:40:00+08:00  
+**Active Batch:** COMPLETE & PRODUCTION HARDENED (All Batches B0 to B11 Finished; Auth & Frontend Views Deployed)
 
 ---
 
@@ -22,6 +22,39 @@
 | **B9** | Telegram bot (parity plus) | R01, R11 | **DONE** | **PASSED** (commit `504d0c6`) |
 | **B10** | Migration, parallel run, cutover | R20 | **DONE** | **PASSED** (commit `f423d1b`) |
 | **B11** | Hardening, docs, GitHub | R10, R22 | **DONE** | **PASSED** (56/56 full test suite pass) |
+| **Fix** | Auth, CSRF & Full Views | R01, R02, R03, R17, R21 | **DONE** | **PASSED** (Real login & product creation verified) |
+
+---
+
+## 2. Recent Production Fixes: Creator Authentication, CSRF & Full Views
+
+1. **Authentication & Session Lifecycle (`backend/app/main.py`, `backend/app/api/auth.py`):**
+   - Implemented automated database initialization of default admin user (`admin` / default `admin123` or `$ADMIN_PASSWORD`) using Argon2id.
+   - Updated `GET /api/auth/me` to automatically issue and refresh the `csrf_token` cookie for clients so all mutating calls have a valid token.
+   - Added `POST /api/auth/change-password` endpoint with old-password verification and Argon2id hash update.
+2. **Frontend Centralized API Client (`frontend/src/api/client.ts`):**
+   - Automated injection of `credentials: 'include'` across all API calls.
+   - Automated CSRF token extraction and `X-CSRF-Token` header injection for all mutating requests (`POST`, `PUT`, `DELETE`, `PATCH`).
+   - Dispatches `auth:unauthorized` event on 401 status to invoke login flow.
+3. **Creator Login & Session Context (`frontend/src/context/AuthContext.tsx`, `frontend/src/components/auth/LoginModal.tsx`):**
+   - Seamless Notion/Apple dark monochrome login modal with prefilled `admin` / `admin123` defaults.
+   - App Shell header displays authenticated username, active session status, and one-click sign-out.
+4. **Complete Settings & Vault Page (`frontend/src/pages/Settings.tsx`):**
+   - Replaced placeholder with full 5-tab settings console:
+     - **Secrets Vault & APIs**: Masked view for `BUFFER_ACCESS_TOKEN`, `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `GOOGLE_DRIVE_SERVICE_ACCOUNT`, and `CLOUDINARY_URL`, modal to replace keys, and live test buttons.
+     - **Regional & Localization**: Timezone (`Asia/Manila`) and Currency (`PHP`).
+     - **Scoring Profiles**: Toggle between v1 (Legacy math) and v2 (Multi-signal).
+     - **Publishing & Safety**: Daily quota, banned claims filter, and `ENABLE_TIKTOK_AUDIO` copyright safety toggle.
+     - **Admin Security**: Change master password form.
+5. **Creator Dashboard (`frontend/src/pages/Dashboard.tsx`):**
+   - Live KPI cards: Today's Quota (rendered/posted), Affiliate Revenue (GMV & Est. Commission), Active Products & Clips, Pending Review Queue count.
+   - Today's 6-slot schedule table with live status badges.
+6. **Clip Library Page (`frontend/src/pages/Clips.tsx`):**
+   - Filter clips by product, 9:16 aspect ratio video cards, FFprobe duration/resolution/fps badges, and editable AI Clip Captions.
+7. **Verification & Real Execution:**
+   - Both Docker images `affiliate-autopilot-frontend` and `affiliate-autopilot-api` built successfully and redeployed.
+   - Real API verification: Tested `POST /api/auth/login` (200 OK), `GET /api/catalog/products` (200 OK), `POST /api/catalog/products` (200 OK, created product folder). All 401 Unauthorized and 403 Forbidden errors resolved!
+   - 56/56 backend unit and contract tests verified passing.
 
 ---
 

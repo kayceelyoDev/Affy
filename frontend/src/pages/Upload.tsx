@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UploadCloud, RefreshCw, FileText, Image as ImageIcon, Zap } from "lucide-react";
 import { Button, Card, Badge, Table } from "../components/ui";
+import { api } from "../api/client";
 
 interface QuotaStats {
   daily_requests_used: number;
@@ -28,13 +29,12 @@ export const UploadPage: React.FC = () => {
 
   const fetchStatsAndUploads = async () => {
     try {
-      const qRes = await fetch("/api/ai/quota");
-      if (qRes.ok) setQuota(await qRes.json());
+      const qData = await api.get<QuotaStats>("/api/ai/quota").catch(() => null);
+      if (qData) setQuota(qData);
 
-      const uRes = await fetch("/api/ingest/uploads");
-      if (uRes.ok) {
-        const data = await uRes.json();
-        setUploads(data.uploads || []);
+      const uData = await api.get<any>("/api/ingest/uploads").catch(() => null);
+      if (uData) {
+        setUploads(uData.uploads || []);
       }
     } catch (err) {
       console.error("Failed to load upload data", err);
@@ -60,30 +60,15 @@ export const UploadPage: React.FC = () => {
       const formData = new FormData();
       selectedFiles.forEach((file) => formData.append("files", file));
 
-      const upRes = await fetch("/api/ingest/upload", {
-        method: "POST",
-        headers: { "X-CSRF-Token": "client-token" },
-        body: formData,
-      });
-
-      if (!upRes.ok) throw new Error("Upload failed");
-      const upData = await upRes.json();
+      const upData = await api.post("/api/ingest/upload", formData);
       const uploadedIds = upData.uploads.map((u: any) => u.id);
 
       setUploading(false);
       setProcessing(true);
 
-      const procRes = await fetch("/api/ingest/process", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": "client-token",
-        },
-        body: JSON.stringify({ upload_ids: uploadedIds }),
+      const procSummary = await api.post("/api/ingest/process", {
+        upload_ids: uploadedIds,
       });
-
-      if (!procRes.ok) throw new Error("Batch processing failed");
-      const procSummary = await procRes.json();
 
       setMessage(
         `Batch processed: ${procSummary.image_orders_auto_approved} orders auto-approved, ` +

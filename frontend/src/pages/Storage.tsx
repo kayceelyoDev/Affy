@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge } from '../components/ui';
+import { api } from '../api/client';
 import { HardDrive, Cloud, RefreshCw, Folder, FileVideo, Eye, X } from 'lucide-react';
 
 interface StorageMeters {
@@ -36,10 +37,8 @@ export const StoragePage: React.FC = () => {
 
   const fetchMeters = async () => {
     try {
-      const res = await fetch('/api/storage/meters');
-      if (res.ok) {
-        setMeters(await res.json());
-      }
+      const data = await api.get<StorageMeters>('/api/storage/meters');
+      setMeters(data);
     } catch (e) {
       console.error('Failed to load meters', e);
     }
@@ -47,10 +46,8 @@ export const StoragePage: React.FC = () => {
 
   const fetchFiles = async (path: string) => {
     try {
-      const res = await fetch(`/api/storage/files?path=${encodeURIComponent(path)}`);
-      if (res.ok) {
-        setFiles(await res.json());
-      }
+      const data = await api.get<StorageFile[]>(`/api/storage/files?path=${encodeURIComponent(path)}`);
+      setFiles(data);
     } catch (e) {
       console.error('Failed to load files', e);
     }
@@ -59,19 +56,9 @@ export const StoragePage: React.FC = () => {
   const handleSyncNow = async () => {
     setIsSyncing(true);
     try {
-      const csrf = document.cookie
-        .split('; ')
-        .find((row) => row.startsWith('csrf_token='))
-        ?.split('=')[1] || '';
-
-      const res = await fetch('/api/storage/sync', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrf },
-      });
-      if (res.ok) {
-        await fetchMeters();
-        await fetchFiles(currentPath);
-      }
+      await api.post('/api/storage/sync');
+      await fetchMeters();
+      await fetchFiles(currentPath);
     } catch (e) {
       console.error('Sync failed', e);
     } finally {
