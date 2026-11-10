@@ -129,7 +129,11 @@ export const StoragePage: React.FC = () => {
       const res = await api.post('/api/storage/sync');
       await fetchMeters();
       await fetchFiles(currentPath);
-      alert(`Sync completed! Status: ${res.status}, new clips synced: ${res.synced ?? 0}`);
+      if (res.ok === false || res.status === 'drive_error') {
+        alert(`Sync Notice: ${res.message || 'Error communicating with Google Drive.'}`);
+      } else {
+        alert(`Sync completed! Status: ${res.status}, new clips synced: ${res.synced ?? 0}`);
+      }
     } catch (e: any) {
       alert(`Sync failed: ${e.message}`);
     } finally {

@@ -124,15 +124,14 @@ async def test_drive_connection(sa_info: dict, folder_id: Optional[str] = None) 
                 clean_id = clean_id.split("/folders/")[1].split("?")[0]
 
             f_res = await client.get(
-                f"https://www.googleapis.com/drive/v3/files/{clean_id}?fields=id,name,mimeType,parents",
+                f"https://www.googleapis.com/drive/v3/files/{clean_id}?supportsAllDrives=true&fields=id,name,mimeType,parents",
                 headers=headers,
             )
             if f_res.status_code == 200:
                 f_data = f_res.json()
-                # Count children inside folder
                 q = f"'{clean_id}' in parents and trashed = false"
                 c_res = await client.get(
-                    f"https://www.googleapis.com/drive/v3/files?q={httpx.URL('', params={'q': q}).params}&fields=files(id,name,mimeType)",
+                    f"https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&q={q}&fields=files(id,name,mimeType)&pageSize=100",
                     headers=headers,
                 )
                 child_count = len(c_res.json().get("files", [])) if c_res.status_code == 200 else 0
@@ -141,6 +140,12 @@ async def test_drive_connection(sa_info: dict, folder_id: Optional[str] = None) 
                     "name": f_data.get("name"),
                     "item_count": child_count,
                     "accessible": True,
+                }
+            elif f_res.status_code == 404:
+                folder_result = {
+                    "id": clean_id,
+                    "accessible": False,
+                    "error": f"Folder not found or not shared. Please open Google Drive -> Share this folder with '{sa_email}'.",
                 }
             else:
                 folder_result = {
@@ -166,30 +171,61 @@ async def list_drive_subfolders_and_clips(sa_info: dict, root_folder_id: str) ->
         clean_id = clean_id.split("/folders/")[1].split("?")[0]
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Get all subfolders
+        # Check root folder access
+        root_res = await client.get(
+            f"https://www.googleapis.com/drive/v3/files/{clean_id}?supportsAllDrives=true&fields=id,name,mimeType",
+            headers=headers,
+        )
+        if root_res.status_code == 404:
+            sa_email = sa_info.get("client_email", "your Service Account email")
+            raise FileNotFoundError(
+                f"Google Drive folder '{clean_id}' was not found. Please open Google Drive -> Share folder -> add '{sa_email}' as Viewer or Editor."
+            )
+        elif root_res.status_code != 200:
+            raise RuntimeError(f"Google Drive API returned HTTP {root_res.status_code}: {root_res.text}")
+
+        root_name = root_res.json().get("name", "Product")
+
+        # 1. Query subfolders inside root folder
         q = f"'{clean_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         res = await client.get(
-            f"https://www.googleapis.com/drive/v3/files?q={q}&fields=files(id,name)&pageSize=100",
+            f"https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&q={q}&fields=files(id,name)&pageSize=100",
             headers=headers,
         )
         folders = res.json().get("files", []) if res.status_code == 200 else []
 
         results = []
+        # For each subfolder, list its videos
         for folder in folders:
             fid = folder["id"]
             fname = folder["name"]
-            # List video files inside subfolder
-            clip_q = f"'{fid}' in parents and trashed = false and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov')"
+            clip_q = f"'{fid}' in parents and trashed = false and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.mkv' or name contains '.webm')"
             c_res = await client.get(
-                f"https://www.googleapis.com/drive/v3/files?q={clip_q}&fields=files(id,name,size,modifiedTime)&pageSize=100",
+                f"https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&q={clip_q}&fields=files(id,name,size,modifiedTime)&pageSize=100",
                 headers=headers,
             )
             clips = c_res.json().get("files", []) if c_res.status_code == 200 else []
+            if clips:
+                results.append({
+                    "folder_id": fid,
+                    "folder_name": fname,
+                    "clips": clips,
+                })
+
+        # 2. ALSO query direct video files in the root folder itself!
+        direct_clip_q = f"'{clean_id}' in parents and trashed = false and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.mkv' or name contains '.webm')"
+        direct_res = await client.get(
+            f"https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&q={direct_clip_q}&fields=files(id,name,size,modifiedTime)&pageSize=100",
+            headers=headers,
+        )
+        direct_clips = direct_res.json().get("files", []) if direct_res.status_code == 200 else []
+        if direct_clips:
             results.append({
-                "folder_id": fid,
-                "folder_name": fname,
-                "clips": clips,
+                "folder_id": clean_id,
+                "folder_name": root_name,
+                "clips": direct_clips,
             })
+
         return results
 
 async def download_file_from_drive(sa_info: dict, file_id: str, dest_path: Path) -> Path:

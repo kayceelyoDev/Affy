@@ -60,7 +60,8 @@ class StorageSyncService:
                         self.last_sync_time = datetime.utcnow()
                         return {"ok": True, "status": "drive_synced", "synced": synced_count}
                     except Exception as de:
-                        logger.error("Drive sync error, falling back to local scan", error=str(de))
+                        logger.error("Drive sync error", error=str(de))
+                        return {"ok": False, "status": "drive_error", "message": str(de), "synced": 0}
 
             if not self.remote:
                 # No remote provider configured; local scan and cache maintenance only
