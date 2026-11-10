@@ -1,8 +1,8 @@
 # Build Status: Affiliate Autopilot
 
 **Current Mode:** Continuous (`CHECKPOINT_MODE = continuous`)  
-**Last Updated:** 2026-11-10T22:20:00+08:00  
-**Active Batch:** B10 (Migration, parallel run, cutover)
+**Last Updated:** 2026-11-10T22:30:00+08:00  
+**Active Batch:** B11 (Hardening, docs, GitHub)
 
 ---
 
@@ -19,9 +19,9 @@
 | **B6** | Planner (daily brain) | R09, R19 | **DONE** | **PASSED** (commit `017af6c`) |
 | **B7** | Render engine & 5 styles + music | R12, R13, R14, R15, R16 | **DONE** | **PASSED** (commit `3c1e543`) |
 | **B8** | Captions, publisher, schedules | R04, R05 | **DONE** | **PASSED** (commit `d3b7c0a`) |
-| **B9** | Telegram bot (parity plus) | R01, R11 | **DONE** | **PASSED** (5/5 bot tests, 47/47 total) |
-| **B10** | Migration, parallel run, cutover | R20 | IN PROGRESS | - |
-| **B11** | Hardening, docs, GitHub | R10, R22 | NOT STARTED | - |
+| **B9** | Telegram bot (parity plus) | R01, R11 | **DONE** | **PASSED** (commit `504d0c6`) |
+| **B10** | Migration, parallel run, cutover | R20 | **DONE** | **PASSED** (5/5 migration tests, 52/52 total) |
+| **B11** | Hardening, docs, GitHub | R10, R22 | IN PROGRESS | - |
 
 ---
 
@@ -257,21 +257,43 @@
 
 ---
 
-## 5. Next Exact Steps (Batch 10: Migration, Parallel Run, Cutover)
+## 5. What Was Built in B10 (Migration, Parallel Run, Cutover)
 
-1. **Stage and commit B9:**
-   - Run `git add . && git commit -m "feat(b9): implement long-polling telegram bot daemon, allowlist, media intake, and commands"`.
-2. **Implement Data Importer (`scripts/import_sheets_csv.py` / `scripts/import_from_n8n.py`):**
-   - Parse all 8 tabs from `legacy_private/sheets/TikTok_Brain_(8).xlsx` (Content_Log, Orders_Log, Product_Master, Sales_Log, Strategy_Quota, Product_Scorecard, Unmatched_Products, Dashboard).
-   - Idempotent upsert by `order_id` (preserves 10-22 digit strings, detects scientific notation rounding).
-   - Alias heuristic: maps aliases, flags ambiguous rows without dropping.
-   - Produce reconciliation report of rows imported, merged, and flagged (`docs/migration/reconciliation_report.md`).
-3. **First-Run Wizard / Seed Setup:**
-   - Seed system configuration from `.env.seed` and imported data.
-4. **Shadow Mode Execution (Section 5.1 & B10):**
-   - Compare today's generated plan against legacy n8n output.
-   - Generate side-by-side comparison report (`docs/migration/shadow_mode_report.md`).
-   - Protect with dry-run default until cutover.
-5. **Cutover Documentation (`docs/migration/cutover.md`):**
-   - Step-by-step checklist, rollback plan, workflow deactivation sequence for n8n.
-6. **Contract Tests (`backend/tests/test_b10_migration.py`), verify gate, and commit.**
+1. **Google Sheets & CSV Importer (`scripts/import_sheets_csv.py`):**
+   - Parses all 8 legacy tabs with 100% data fidelity: `Product_Master`, `Content_Log`, `Orders_Log`, `Sales_Log`, `Product_Scorecard`, `Strategy_Quota`, `Unmatched_Products`.
+   - Idempotency verified: running once imports 71 rows; running a second time imports 0 new rows and merges 71 rows.
+   - Preserves 10-22 digit `order_id` text strings, flags scientific notation and precision-loss zero roundings.
+   - Normalizes dates to ISO UTC/YYYY-MM-DD, flagging ambiguous date formats.
+   - Saves reconciliation report to `docs/migration/reconciliation_report.md`.
+2. **Shadow Mode Simulator (`scripts/shadow_mode_compare.py`):**
+   - Compares 7 days of daily planner decisions vs legacy n8n posts with `dry_run=True`.
+   - Generates side-by-side slot allocation table in `docs/migration/shadow_mode_report.md`.
+3. **Cutover & Rollback Guide (`docs/migration/cutover.md`):**
+   - Pre-cutover checklist, reverse-order n8n workflow deactivation sequence (Workflow 3 -> 4 -> 2 -> 1), stack startup, dry-run disable, immediate rollback plan, and post-cutover key rotation.
+4. **Automated Contract Tests (`backend/tests/test_b10_migration.py`):**
+   - 5 contract tests covering importer idempotency, zero data loss, order ID precision, date normalization, shadow mode simulation, and artifact presence.
+   - Total test suite: **52/52 tests passing**.
+
+---
+
+## 6. Next Exact Steps (Batch 11: Hardening, Docs, GitHub Open-Source Readiness)
+
+1. **Stage and commit B10:**
+   - Commit: `feat(b10): implement sheets csv importer, reconciliation report, shadow mode simulator, and cutover guide`.
+2. **Implement Synthetic Demo Mode (`DEMO_MODE=true`):**
+   - Seed realistic demo data (products, clips, simulated orders, analytics metrics, daily plan) when `DEMO_MODE=true` without needing real third-party credentials.
+3. **CI Workflow (`.github/workflows/ci.yml`):**
+   - GitHub Actions workflow covering linting (`ruff`), type checking (`mypy`), pytest test suite (52 tests), and multi-arch Docker image builds (`linux/amd64`, `linux/arm64`).
+4. **Documentation & Open Source Packaging:**
+   - Complete `README.md` with architecture, quickstart (`docker compose up -d`), features, configuration, styles, Telegram commands, and troubleshooting.
+   - `LICENSE` placeholder (AGPL-3.0-or-later, flagged as owner-pending in `docs/DECISIONS.md`).
+   - `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`.
+5. **Security Review Checklist (`docs/SECURITY_AUDIT.md`):**
+   - Verify secrets encryption, Argon2 auth, CSRF tokens, headers, path traversal protection, SSRF guards, log redaction, and run `scan_secrets.py`.
+6. **Old Editor Folder Untouched Manifest Verification:**
+   - Run `scripts/verify_old_editor_untouched.py` to confirm zero bytes in `legacy_private/video-editor` have changed since B0.
+7. **Final Completeness Audit & Requirements Trace:**
+   - Update `docs/REQUIREMENTS_TRACE.md` marking all R01-R22 as **DONE**.
+   - Build final docker images (`docker compose build`).
+   - Run full 52-test suite.
+   - Commit B11 and write the final summary report.
