@@ -1,8 +1,8 @@
 # Build Status: Affiliate Autopilot
 
 **Current Mode:** Continuous (`CHECKPOINT_MODE = continuous`)  
-**Last Updated:** 2026-11-10T23:40:00+08:00  
-**Active Batch:** COMPLETE & PRODUCTION HARDENED (All Batches B0 to B11 Finished; Auth & Frontend Views Deployed)
+**Last Updated:** 2026-11-11T01:25:00+08:00  
+**Active Batch:** COMPLETE & PRODUCTION HARDENED (All Batches B0 to B11 Finished; Google Drive Folder-as-Product Auto-Adoption & Clean Catalog Deployed)
 
 ---
 
@@ -24,6 +24,49 @@
 | **B11** | Hardening, docs, GitHub | R10, R22 | **DONE** | **PASSED** (56/56 full test suite pass) |
 | **Fix** | Auth, CSRF & Full Views | R01, R02, R03, R17, R21 | **DONE** | **PASSED** (Real login & product creation verified) |
 | **Pipeline** | End-to-End 4-Workflow Automation & Zero Mock Data | R01-R22, PDF Parity | **DONE** | **PASSED** (Auto-Edit FFmpeg & Buffer Posting verified live) |
+| **Folder=Prod**| Google Drive Subfolders as Products, Clip Library UI & Complete Clean Slate | R05, R17, UI Parity | **DONE** | **PASSED** (commit `c306d8c`) |
+
+---
+
+## 2. Google Drive Subfolder = Product Auto-Adoption & Clean Catalog
+
+1. **Folder = Product Parity (Zero Manual Product Creation Needed):**
+   - Eliminated artificial product creation requirements: in Google Drive, every subfolder under `TIKTOK CLIPS` (`1E8RKxQ_j99CCMchUxYoO2ioSDcFL9U85`) is the canonical product.
+   - All 11 real products automatically adopted with active clips:
+     - `COMPUTER SPEAKER - POPCORN` (7 clips)
+     - `POPCORN BASS X9 PRO - IN EAR MONITOR` (12 clips)
+     - `KZ EDX PRO - IN EAR MONITOR` (8 clips)
+     - `20000MAH POWERBANK - TRANYO` (9 clips)
+     - `ATTACK SHARK X11 - WIRELESS MOUSE` (14 clips)
+     - `INPLAY BK680 - GAMING KEYBOARD` (10 clips)
+     - `LAPTOP COOLER - INPLAY` (7 clips)
+     - `MAONO DGM20S - DYNAMIC MICROPHONE` (3 clips)
+     - `POPCORN BASS X8 PRO - IN EAR MONITOR` (3 clips)
+     - `BLUETOOTH SPEAKER - ROBOT` (3 clips)
+     - `FAST CHARGER - TRANYO` (3 clips)
+   - Total 79 real iPhone vertical video clips indexed with FFprobe (resolution, duration, fps, codec).
+
+2. **Complete Purge of Mock/Test Data:**
+   - Deleted old mock products (`Attack Shark X11` test entry, `RGB Mechanical Keyboard`, `Viral LED Lamp`, `Test Folder`) and mock video clips (`sample_upload.mp4`).
+   - Wiped all mock scheduled posts and render jobs (`posts` count = 0, `render_jobs` count = 0).
+   - Removed physical mock folders (`data/clips/Electronics`, `data/clips/Gaming`).
+
+3. **Clip Library Direct Google Drive Sync & Execution UI (`frontend/src/pages/Clips.tsx`):**
+   - Prominent **Google Drive Footage Sync** hero card at the top of `/clips`:
+     - Shows connected Google Drive folder `TIKTOK CLIPS` (`1E8RKxQ_j99CCMchUxYoO2ioSDcFL9U85`).
+     - One-click **"Sync Google Drive Clips"** button directly in the library.
+     - One-click **"Auto-Edit (FFmpeg)"** button for all open slots or for the selected product.
+     - Product folder filter pills showing clip counts per folder.
+     - Card action: **"Delete Clip"** trash icon calling `DELETE /api/catalog/clips/{id}`.
+     - Video player preview with FFprobe metadata badges.
+
+4. **Videos Page Delete & Wipe Controls (`frontend/src/pages/Videos.tsx`):**
+   - Added **"Clear All Posts"** button in header calling `POST /api/posts/clear` with confirmation.
+   - Added per-row **Delete Post** trash icon calling `DELETE /api/posts/{id}`.
+
+5. **Drive URL Sanitization:**
+   - Automatically parses and extracts clean alphanumeric Google Drive folder IDs even if the user pastes a full web URL (`https://drive.google.com/drive/folders/...`).
+
 
 ---
 
