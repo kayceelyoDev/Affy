@@ -25,6 +25,8 @@ COPY backend /app/backend
 COPY styles /app/styles
 COPY fonts /app/fonts
 COPY bot /app/bot
+COPY scripts /app/scripts
+COPY docs /app/docs
 RUN mkdir -p /app/data /data && chown -R appuser:appuser /app /data
 
 USER appuser
