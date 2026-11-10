@@ -1,0 +1,73 @@
+{
+  "id": "punchy_zoom",
+  "name": "Punchy Zoom",
+  "version": "1.0",
+  "description": "High-energy fast cuts (0.8 to 1.5s), zoom punches on the beat, whip/flash transitions and bold highlighted center captions.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast",
+    "pixel_format": "yuv420p"
+  },
+  "clip_rules": {
+    "min_count": 4,
+    "max_count": 16,
+    "target_seg": 1.4,
+    "min_duration": 10.0,
+    "max_duration": 28.0,
+    "crop_mode": "cover"
+  },
+  "cut_logic": {
+    "mode": "beat_synced",
+    "fixed_duration": 1.2,
+    "beats_per_cut": 2
+  },
+  "transitions": {
+    "enabled": true,
+    "transitions": [
+      { "type": "zoomin", "duration": 0.20, "weight": 2.0 },
+      { "type": "wipeleft", "duration": 0.20, "weight": 1.5 },
+      { "type": "fade", "duration": 0.15, "weight": 1.0 }
+    ]
+  },
+  "text_layers": [
+    {
+      "name": "title",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "0xEFD34C",
+      "stroke_color": "black@0.9",
+      "stroke_width": 3,
+      "position_y": 240,
+      "max_size": 130,
+      "width_ratio": 0.82,
+      "box": false,
+      "animation": "none"
+    },
+    {
+      "name": "clip_caption",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 960,
+      "max_size": 90,
+      "width_ratio": 0.80,
+      "box": true,
+      "box_color": "black@0.6",
+      "animation": "none"
+    }
+  ],
+  "graphics": [],
+  "motion": {
+    "type": "zoom_punch",
+    "intensity": 1.15
+  },
+  "audio": {
+    "target_lufs": -13.5,
+    "fade_out_sec": 0.8,
+    "ducking": false,
+    "normalize": true
+  }
+}

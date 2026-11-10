@@ -24,6 +24,8 @@ RUN pip install --no-cache-dir -r /app/worker/requirements.txt
 
 COPY backend /app/backend
 COPY worker /app/worker
+COPY styles /app/styles
+COPY fonts /app/fonts
 RUN mkdir -p /app/data /app/fonts && chown -R appuser:appuser /app
 
 USER appuser

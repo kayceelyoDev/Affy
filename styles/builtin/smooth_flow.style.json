@@ -1,0 +1,72 @@
+{
+  "id": "smooth_flow",
+  "name": "Smooth Flow",
+  "version": "1.0",
+  "description": "Soft crossfades and slides with lower-center AI clip captions and title fading out gracefully after 2 seconds.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast",
+    "pixel_format": "yuv420p"
+  },
+  "clip_rules": {
+    "min_count": 2,
+    "max_count": 10,
+    "target_seg": 2.5,
+    "min_duration": 10.0,
+    "max_duration": 28.0,
+    "crop_mode": "cover"
+  },
+  "cut_logic": {
+    "mode": "beat_synced",
+    "fixed_duration": 2.5,
+    "beats_per_cut": null
+  },
+  "transitions": {
+    "enabled": true,
+    "transitions": [
+      { "type": "fade", "duration": 0.35, "weight": 2.0 },
+      { "type": "dissolve", "duration": 0.35, "weight": 2.0 },
+      { "type": "slideleft", "duration": 0.30, "weight": 1.0 }
+    ]
+  },
+  "text_layers": [
+    {
+      "name": "title",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.8",
+      "stroke_width": 2,
+      "position_y": 200,
+      "max_size": 110,
+      "width_ratio": 0.80,
+      "box": false,
+      "animation": "fade_out_2s"
+    },
+    {
+      "name": "clip_caption",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 1550,
+      "max_size": 75,
+      "width_ratio": 0.85,
+      "box": false,
+      "animation": "none"
+    }
+  ],
+  "graphics": [],
+  "motion": {
+    "type": "none",
+    "intensity": 1.0
+  },
+  "audio": {
+    "target_lufs": -14.0,
+    "fade_out_sec": 1.2,
+    "ducking": false,
+    "normalize": true
+  }
+}
