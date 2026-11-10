@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, Dict, Any
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,10 @@ class UpdateSettingRequest(BaseModel):
     value: str
     is_secret: bool = False
     description: Optional[str] = None
+
+class TestServiceRequest(BaseModel):
+    credential: Optional[Union[str, Dict[str, Any]]] = None
+    folder_id: Optional[str] = None
 
 @router.get("", response_model=list[SettingItem])
 async def list_settings(
@@ -84,12 +88,13 @@ async def update_setting(
 @router.post("/test/{service}")
 async def test_connection(
     service: str,
+    req_body: Optional[TestServiceRequest] = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     service = service.lower()
     if service == "telegram":
-        token = await vault_service.get_secret(db, "TELEGRAM_BOT_TOKEN")
+        token = req_body.credential if (req_body and req_body.credential) else await vault_service.get_secret(db, "TELEGRAM_BOT_TOKEN")
         if not token:
             return {"ok": False, "service": "telegram", "message": "TELEGRAM_BOT_TOKEN not configured in vault."}
         import httpx
@@ -104,7 +109,7 @@ async def test_connection(
             return {"ok": False, "service": "telegram", "message": str(e)}
 
     elif service == "gemini":
-        api_key = await vault_service.get_secret(db, "GEMINI_API_KEY")
+        api_key = req_body.credential if (req_body and req_body.credential) else await vault_service.get_secret(db, "GEMINI_API_KEY")
         if not api_key:
             return {"ok": False, "service": "gemini", "message": "GEMINI_API_KEY not configured in vault."}
         import httpx
@@ -118,7 +123,7 @@ async def test_connection(
             return {"ok": False, "service": "gemini", "message": str(e)}
 
     elif service == "buffer":
-        token = await vault_service.get_secret(db, "BUFFER_ACCESS_TOKEN")
+        token = req_body.credential if (req_body and req_body.credential) else await vault_service.get_secret(db, "BUFFER_ACCESS_TOKEN")
         if not token:
             return {"ok": False, "service": "buffer", "message": "BUFFER_ACCESS_TOKEN not configured in vault."}
         import httpx
@@ -137,22 +142,51 @@ async def test_connection(
             return {"ok": False, "service": "buffer", "message": str(e)}
 
     elif service in ("gdrive", "google_drive", "drive"):
-        raw_sa = await vault_service.get_secret(db, "GOOGLE_DRIVE_SERVICE_ACCOUNT")
-        if not raw_sa:
+        import json
+        from backend.app.services.storage.drive_api import test_drive_connection as run_test_drive
+
+        sa_info = None
+        raw_sa = None
+
+        if req_body and req_body.credential:
+            if isinstance(req_body.credential, dict):
+                sa_info = req_body.credential
+            else:
+                raw_sa = str(req_body.credential).strip()
+        else:
+            raw_sa = await vault_service.get_secret(db, "GOOGLE_DRIVE_SERVICE_ACCOUNT")
+            if raw_sa:
+                raw_sa = raw_sa.strip()
+
+        if raw_sa and not sa_info:
+            try:
+                if raw_sa.startswith("{"):
+                    sa_info = json.loads(raw_sa)
+                else:
+                    sa_info = {"private_key": raw_sa}
+            except Exception as je:
+                return {
+                    "ok": False,
+                    "service": "google_drive",
+                    "message": f"Could not parse credentials JSON: {str(je)}",
+                }
+
+        if not sa_info:
             return {
                 "ok": False,
                 "service": "google_drive",
-                "message": "GOOGLE_DRIVE_SERVICE_ACCOUNT not configured in vault.",
+                "message": "GOOGLE_DRIVE_SERVICE_ACCOUNT not configured in vault. Enter credentials first.",
             }
 
-        folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
-        folder_rec = (await db.execute(folder_stmt)).scalar_one_or_none()
-        folder_id = folder_rec.value if folder_rec else None
+        folder_id = None
+        if req_body and req_body.folder_id:
+            folder_id = req_body.folder_id.strip()
+        else:
+            folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
+            folder_rec = (await db.execute(folder_stmt)).scalar_one_or_none()
+            folder_id = folder_rec.value.strip() if folder_rec and folder_rec.value else None
 
-        import json
-        from backend.app.services.storage.drive_api import test_drive_connection as run_test_drive
         try:
-            sa_info = json.loads(raw_sa)
             test_res = await run_test_drive(sa_info, folder_id=folder_id)
             folder_info = ""
             if test_res.get("folder"):

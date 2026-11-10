@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge, Input } from '../components/ui';
 import { api } from '../api/client';
+import { GoogleDriveCredentialModal } from '../components/credentials/GoogleDriveCredentialModal';
 import {
   HardDrive,
   Cloud,
@@ -50,8 +51,6 @@ export const StoragePage: React.FC = () => {
   const [testResult, setTestResult] = useState<any | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
-  const [serviceAccountJson, setServiceAccountJson] = useState('');
-  const [savingJson, setSavingJson] = useState(false);
   const [hasCredential, setHasCredential] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -108,25 +107,6 @@ export const StoragePage: React.FC = () => {
       alert(`Failed to save Folder ID: ${e.message}`);
     } finally {
       setSavingFolderId(false);
-    }
-  };
-
-  const handleSaveServiceAccount = async () => {
-    setSavingJson(true);
-    try {
-      await api.put('/api/settings/GOOGLE_DRIVE_SERVICE_ACCOUNT', {
-        value: serviceAccountJson.trim(),
-        is_secret: true,
-        description: 'Google Drive Service Account JSON Credentials',
-      });
-      setHasCredential(true);
-      setShowJsonModal(false);
-      setServiceAccountJson('');
-      alert('Google Drive Service Account JSON saved and encrypted in Vault!');
-    } catch (e: any) {
-      alert(`Failed to save credential: ${e.message}`);
-    } finally {
-      setSavingJson(false);
     }
   };
 
@@ -347,7 +327,7 @@ export const StoragePage: React.FC = () => {
                   </Badge>
                 </div>
                 <Button size="sm" variant="secondary" onClick={() => setShowJsonModal(true)}>
-                  {hasCredential ? 'Replace JSON' : 'Paste Key'}
+                  {hasCredential ? 'Edit Credential' : 'Set Up Credential'}
                 </Button>
               </div>
             </div>
@@ -542,54 +522,15 @@ export const StoragePage: React.FC = () => {
         </div>
       )}
 
-      {/* Service Account Modal */}
-      {showJsonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-card hairline-border bg-white dark:bg-[#121212] p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
-              <div>
-                <h3 className="text-sm font-semibold">Paste Google Service Account JSON</h3>
-                <p className="text-xs text-neutral-400">
-                  Stored with AES-256-GCM hardware encryption in the local Vault.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowJsonModal(false)}
-                className="p-1 rounded-control hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <textarea
-              rows={8}
-              value={serviceAccountJson}
-              onChange={(e) => setServiceAccountJson(e.target.value)}
-              placeholder={`{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key_id": "...",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n...",\n  "client_email": "..."\n}`}
-              className="w-full text-xs font-mono rounded-input hairline-border bg-neutral-50 dark:bg-neutral-900 p-3 text-neutral-900 dark:text-white"
-            />
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowJsonModal(false)}
-                disabled={savingJson}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveServiceAccount}
-                disabled={savingJson || !serviceAccountJson.trim()}
-              >
-                {savingJson ? 'Encrypting & Saving...' : 'Save Encrypted Credential'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Google Drive Credential Setup Modal (n8n style) */}
+      <GoogleDriveCredentialModal
+        isOpen={showJsonModal}
+        onClose={() => setShowJsonModal(false)}
+        onSuccess={() => {
+          loadDriveSettings();
+          handleTestConnection();
+        }}
+      />
     </div>
   );
 };

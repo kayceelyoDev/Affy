@@ -13,13 +13,48 @@ def _b64_url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 async def get_drive_access_token(sa_info: dict) -> str:
-    """Exchange Google Service Account credentials for an OAuth2 Bearer token."""
-    client_email = sa_info.get("client_email")
-    private_key_pem = sa_info.get("private_key")
+    """Exchange Google Service Account credentials or OAuth2 refresh token for a Bearer token."""
+    # Handle nested Google OAuth client JSONs
+    if "installed" in sa_info and isinstance(sa_info["installed"], dict):
+        sa_info = {**sa_info, **sa_info["installed"]}
+    elif "web" in sa_info and isinstance(sa_info["web"], dict):
+        sa_info = {**sa_info, **sa_info["web"]}
+
+    # Direct access token fallback
+    if sa_info.get("access_token") and not sa_info.get("refresh_token") and not sa_info.get("private_key"):
+        return sa_info["access_token"]
+
     token_uri = sa_info.get("token_uri", "https://oauth2.googleapis.com/token")
 
-    if not client_email or not private_key_pem:
-        raise ValueError("Invalid Service Account JSON: client_email and private_key are required.")
+    # MODE 1: OAuth2 with Client ID + Client Secret + Refresh Token (n8n style)
+    if sa_info.get("refresh_token") and sa_info.get("client_id"):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(
+                token_uri,
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": sa_info["client_id"].strip(),
+                    "client_secret": (sa_info.get("client_secret") or "").strip(),
+                    "refresh_token": sa_info["refresh_token"].strip(),
+                },
+            )
+            if res.status_code != 200:
+                raise RuntimeError(f"Google OAuth2 refresh token failed ({res.status_code}): {res.text}")
+            return res.json()["access_token"]
+
+    # MODE 2: Google Service Account (Field-by-field: client_email + private_key)
+    client_email = (sa_info.get("client_email") or "").strip()
+    raw_key = (sa_info.get("private_key") or "").strip()
+
+    if not client_email:
+        raise ValueError("Missing 'client_email' (Service Account Email) or 'client_id' (OAuth).")
+    if not raw_key:
+        raise ValueError("Missing 'private_key' (Service Account Private Key) or 'refresh_token'.")
+
+    # Normalize private key (replace literal \n with real newlines, format PEM headers)
+    normalized_key = raw_key.replace("\\n", "\n")
+    if "-----BEGIN PRIVATE KEY-----" not in normalized_key:
+        normalized_key = f"-----BEGIN PRIVATE KEY-----\n{normalized_key}\n-----END PRIVATE KEY-----"
 
     header = {"alg": "RS256", "typ": "JWT"}
     now = int(time.time())
@@ -35,7 +70,11 @@ async def get_drive_access_token(sa_info: dict) -> str:
     p_b64 = _b64_url(json.dumps(payload).encode("utf-8"))
     signing_input = f"{h_b64}.{p_b64}".encode("utf-8")
 
-    priv_key = load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
+    try:
+        priv_key = load_pem_private_key(normalized_key.encode("utf-8"), password=None)
+    except Exception as e:
+        raise ValueError(f"Invalid RSA Private Key format: {str(e)}")
+
     signature = priv_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
     sig_b64 = _b64_url(signature)
     jwt_token = f"{h_b64}.{p_b64}.{sig_b64}"
@@ -48,6 +87,10 @@ async def get_drive_access_token(sa_info: dict) -> str:
                 "assertion": jwt_token,
             },
         )
+        if res.status_code != 200:
+            raise RuntimeError(f"Google Service Account authorization failed ({res.status_code}): {res.text}")
+        data = res.json()
+        return data["access_token"]
         if res.status_code != 200:
             raise RuntimeError(f"Google OAuth token request failed ({res.status_code}): {res.text}")
         data = res.json()

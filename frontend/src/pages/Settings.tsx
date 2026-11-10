@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Badge } from '../components/ui';
 import { api } from '../api/client';
+import { GoogleDriveCredentialModal } from '../components/credentials/GoogleDriveCredentialModal';
 import {
   Key,
   Shield,
@@ -33,6 +34,7 @@ export const SettingsPage: React.FC = () => {
   // Secret edit modal
   const [editingSecret, setEditingSecret] = useState<string | null>(null);
   const [newSecretValue, setNewSecretValue] = useState('');
+  const [gdriveModalOpen, setGdriveModalOpen] = useState(false);
 
   // Password change
   const [oldPassword, setOldPassword] = useState('');
@@ -258,11 +260,15 @@ export const SettingsPage: React.FC = () => {
                     variant="secondary"
                     size="sm"
                     onClick={() => {
-                      setEditingSecret(sec.id);
-                      setNewSecretValue('');
+                      if (sec.id === 'GOOGLE_DRIVE_SERVICE_ACCOUNT') {
+                        setGdriveModalOpen(true);
+                      } else {
+                        setEditingSecret(sec.id);
+                        setNewSecretValue('');
+                      }
                     }}
                   >
-                    Replace Key
+                    {sec.id === 'GOOGLE_DRIVE_SERVICE_ACCOUNT' ? 'Configure (n8n style)' : 'Replace Key'}
                   </Button>
                   <Button
                     variant="ghost"
@@ -536,6 +542,16 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Google Drive Credential Setup Modal (n8n style) */}
+      <GoogleDriveCredentialModal
+        isOpen={gdriveModalOpen}
+        onClose={() => setGdriveModalOpen(false)}
+        onSuccess={() => {
+          fetchSettings();
+          handleTestConnection('drive');
+        }}
+      />
     </div>
   );
 };
