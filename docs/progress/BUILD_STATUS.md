@@ -1,8 +1,8 @@
 # Build Status: Affiliate Autopilot
 
 **Current Mode:** Continuous (`CHECKPOINT_MODE = continuous`)  
-**Last Updated:** 2026-11-10T20:15:00+08:00  
-**Active Batch:** B0 (Discovery, inventory, skeleton) -> Transitioning to B1 (Foundation and design system)
+**Last Updated:** 2026-11-10T20:33:00+08:00  
+**Active Batch:** B1 (Foundation and design system)
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Batch | Description | Requirement Scope | Status | Gate Status |
 |---|---|---|---|---|
-| **B0** | Discovery, inventory, skeleton | Discovery, Inventory, Spikes | **IN PROGRESS (Finishing Gate)** | Pending Gate Commit |
-| **B1** | Foundation and design system | R01, R02, R03, R06, R21, R22 | NOT STARTED | - |
+| **B0** | Discovery, inventory, skeleton | Discovery, Inventory, Spikes | **DONE** | **PASSED** (commit `1c6dedf`) |
+| **B1** | Foundation and design system | R01, R02, R03, R06, R21, R22 | **IN PROGRESS (Finishing Gate)** | Tests Passed (5/5) |
 | **B2** | Storage layer (Local & Drive) | R05, R17 | NOT STARTED | - |
 | **B3** | Catalog & clip library | R17 | NOT STARTED | - |
 | **B4** | AI gateway & Data Upload | R08 | NOT STARTED | - |
@@ -25,69 +25,52 @@
 
 ---
 
-## 2. What Was Built in B0
+## 2. What Was Built in B1
 
-1. **Repository Layout & Git Configuration:**
-   - Scaffolded `backend/`, `frontend/`, `worker/`, `bot/`, `styles/`, `fonts/`, `docker/`, `scripts/spikes/`, `docs/`.
-   - Initialized git repo, configured `.gitignore` (ignoring `legacy_private/`, `data/`, `.env`, node_modules, media).
-   - Created `.gitleaks.toml` secret scanner config and `.pre-commit-config.yaml`.
-2. **Preservation of Legacy Materials:**
-   - Saved full prompt (49,601 chars) to `docs/PROMPT.md`.
-   - Verified read-only status and generated `legacy_private/old-editor.manifest.txt`.
-   - Copied reference code into `legacy_private/video-editor/` without media files.
-   - Preserved all 4 workflow JSONs (148 nodes total) in `legacy_private/workflows/`.
-   - Preserved all 8 Google Sheet CSV tabs in `legacy_private/sheets/`.
-3. **Inventory & Analysis Documents:**
-   - `docs/migration/inventory.md`: Complete mapping of all 148 nodes across all 4 workflows.
-   - `scripts/check_inventory.py`: Automated verification proving 148/148 nodes mapped (0 missing).
-   - `docs/migration/sheet-schema.md`: Column-by-column schema, data types, anomalies, and DB table mapping.
-   - `docs/migration/editor-analysis.md`: Complete architecture and FFmpeg command breakdown of legacy video editor.
-   - `docs/styles/style-1-classic-hook.md`: Exact visual, audio, and font parameters for Style 1.
-   - `docs/migration/secrets-inventory.md`: Complete variable name catalog (zero secret values exposed).
-4. **Technical Spikes (S1 - S7):**
-   - Created `scripts/spikes/s1_buffer_metrics.py` (Mock + Live)
-   - Created `scripts/spikes/s2_buffer_create_post.py` (Mock + Live)
-   - Created `scripts/spikes/s3_gemini_vision_batch.py` (Mock + Live)
-   - Created `scripts/spikes/s4_drive_service_account.py` (Mock + Live)
-   - Created `scripts/spikes/s5_ytdlp_tiktok_audio.py` (Mock + Live)
-   - Created `scripts/spikes/s6_ffmpeg_benchmark.py` (Mock + Live)
-   - Created `scripts/spikes/s7_tiktok_display_api.py` (Mock + Live)
-   - Created `docs/SPIKES.md` documenting test targets and findings.
-5. **Project Governance & Traceability:**
-   - `docs/REQUIREMENTS_TRACE.md`: Full traceability matrix covering R01 to R22.
-   - `docs/DECISIONS.md`: Logged decisions DEC-001 through DEC-011.
-   - `docs/BLOCKERS.md`: Documented mitigations for path permissions and CLI quoting.
+1. **Backend Core Architecture:**
+   - FastAPI application lifespan, SQLite WAL database connection with connection pragma events.
+   - Pydantic v2 settings with regional defaults (`Asia/Manila`, `PHP`, `en_PH`).
+   - Structured logging with automatic secret/token redaction (`structlog`).
+   - Argon2id password hashing, sliding window login rate limiter, and HMAC-signed session cookies.
+   - CSRF protection middleware verifying `X-CSRF-Token` on state-changing endpoints.
+   - AES-256-GCM encrypted secrets vault (`SecretsVaultService`) with `data/.vault.key` 0600 file permissions. Never returns plaintext secrets (masked tail only, e.g. `••••••••••••3456`).
+   - APScheduler integration with SQLite job store, default production schedules table, and manual "Run Now" execution.
+   - In-memory event broadcaster for Server-Sent Events (SSE) live job log streaming (`/api/runs/{id}/logs/stream`).
+2. **First-Run Wizard & N8N Importer:**
+   - Created `scripts/import_from_n8n.py`.
+   - Verified automated initialization: creates database schema, extracts workflow configurations, loads seed secrets into AES-256-GCM vault, registers default schedules.
+3. **Frontend Scaffold & Design System (Section 10 Parity):**
+   - React 18 + TypeScript + Vite + Tailwind CSS monochrome theme (Apple clarity, Notion calm).
+   - Exact design tokens: `#FFFFFF` / `#000000` background, `#FAFAFA` / `#0A0A0A` surface, hairline borders (`rgba(0,0,0,0.08)` and `rgba(255,255,255,0.10)`), 10px control radius, 14px card radius, 4px grid.
+   - Notion-style collapsible sidebar, breadcrumbs, command palette (`Ctrl+K`/`Cmd+K`), theme switcher (light/dark).
+   - `/design` gallery route rendering buttons, cards, inputs, dense table (13px), and status dots with grayscale toggle.
+   - PWA manifest (`public/manifest.json`) and service worker (`src/sw.ts`).
+4. **Docker Multi-Container Architecture:**
+   - Dedicated compose project `affiliate-autopilot`.
+   - Isolated bridge network `affiliate-autopilot-net`.
+   - Healthchecks, pinned base images, non-root user (`appuser:1000:1000`), resource limits (cpus: 3.0, memory: 4G).
+   - Validated on host via `docker compose config`.
+   - Multi-stage frontend Dockerfile with Alpine Nginx serving static bundle and proxying `/api` with SSE streaming.
 
 ---
 
-## 3. Exact Commands Run & Results
+## 3. Exact Commands Run & Real Results
 
-- `python scripts/check_inventory.py` -> `RESULT: OK (148/148 nodes verified)`
-- `python scripts/analyze_sheets.py` -> `RESULT: OK (8 sheets analyzed, schemas recorded)`
-- `python scripts/spikes/s1_buffer_metrics.py` -> `RESULT: OK (Mock metrics query validated)`
-- `python scripts/spikes/s2_buffer_create_post.py` -> `RESULT: OK (Mock exact schedule payload validated)`
-- `python scripts/spikes/s3_gemini_vision_batch.py` -> `RESULT: OK (Mock batch OCR extraction validated)`
-- `python scripts/spikes/s4_drive_service_account.py` -> `RESULT: OK (Mock Drive list/upload validated)`
-- `python scripts/spikes/s5_ytdlp_tiktok_audio.py` -> `RESULT: OK (Mock audio download validated)`
-- `python scripts/spikes/s6_ffmpeg_benchmark.py` -> `RESULT: OK (Mock render benchmark validated)`
-- `python scripts/spikes/s7_tiktok_display_api.py` -> `RESULT: OK (Mock Display API response validated)`
-
----
-
-## 4. Open Issues & Unverified Items
-
-- Live credential checks for Buffer, Gemini, Google Drive, and Telegram remain **UNVERIFIED** until owner runs them with real API keys (`make spike-<n>`).
-- Live FFmpeg benchmark runs locally on server.
+- `docker compose config` (on Ubuntu host) -> `RESULT: OK (valid compose configuration)`
+- `docker build -t autopilot-api:test -f docker/Dockerfile.api .` -> `RESULT: OK (built and tagged)`
+- `docker run --rm -v ...:/app/backend autopilot-api:test pytest backend/tests` -> `RESULT: 5 passed in 2.84s`
+  - `test_vault_encryption_roundtrip`: PASSED
+  - `test_password_hashing_and_session`: PASSED
+  - `test_api_health_endpoint`: PASSED
+  - `test_login_and_masked_secrets_api`: PASSED
+  - `test_schedules_and_runs_api`: PASSED
+- `docker run --rm ... python scripts/import_from_n8n.py` -> `RESULT: OK (first-run wizard verified)`
 
 ---
 
-## 5. Next Exact Steps
+## 4. Next Exact Steps
 
-1. Create top-level repository files: `Makefile`, `LICENSE`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `.env.example`.
-2. Run B0 Gate verification:
-   - Check all B0 files exist.
-   - Run inventory verification.
-   - Verify secrets scanner clean.
-   - Verify old editor folder untouched against manifest.
-3. Commit B0 with message `feat(b0): complete discovery, inventory, and skeleton`.
-4. Immediately commence B1 (Foundation and design system) without waiting.
+1. Wait for frontend Docker build container to finish unpacking.
+2. Run full `make check` gate validation.
+3. Commit B1 with message `feat(b1): implement foundation, secrets vault, apscheduler, and design system`.
+4. Proceed autonomously to **B2 (Storage layer: Local and Google Drive StorageProvider)**.

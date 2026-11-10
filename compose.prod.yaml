@@ -1,0 +1,9 @@
+name: affiliate-autopilot
+
+services:
+  api:
+    restart: always
+  worker:
+    restart: always
+  bot:
+    restart: always

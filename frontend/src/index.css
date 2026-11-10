@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #FFFFFF;
+  --surface: #FAFAFA;
+  --raised: #FFFFFF;
+  --border: rgba(0, 0, 0, 0.08);
+  --text-primary: #0A0A0A;
+  --text-secondary: #6B6B6B;
+  --text-tertiary: #9A9A9A;
+  --focus-ring: #000000;
+  --btn-bg: #000000;
+  --btn-text: #FFFFFF;
+}
+
+.dark {
+  --bg: #000000;
+  --surface: #0A0A0A;
+  --raised: #141414;
+  --border: rgba(255, 255, 255, 0.10);
+  --text-primary: #F5F5F5;
+  --text-secondary: #A1A1A1;
+  --text-tertiary: #6E6E6E;
+  --focus-ring: #FFFFFF;
+  --btn-bg: #FFFFFF;
+  --btn-text: #000000;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Inter", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dense table typography */
+.table-dense th,
+.table-dense td {
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+/* Hairline border utility */
+.hairline-border {
+  border: 1px solid var(--border);
+}
+
+.hairline-b {
+  border-bottom: 1px solid var(--border);
+}
+
+.hairline-t {
+  border-top: 1px solid var(--border);
+}
+
+.hairline-r {
+  border-right: 1px solid var(--border);
+}
+
+.hairline-l {
+  border-left: 1px solid var(--border);
+}
+
+/* Translucent blurred chrome */
+.glass-chrome {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Controls focus ring */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Motion transition standard */
+.transition-standard {
+  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}

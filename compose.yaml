@@ -1,0 +1,85 @@
+name: affiliate-autopilot
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: autopilot-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8090}:8090"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+      - APP_TIMEZONE=${APP_TIMEZONE:-Asia/Manila}
+      - APP_CURRENCY=${APP_CURRENCY:-PHP}
+    networks:
+      - autopilot-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: autopilot-frontend
+    restart: unless-stopped
+    ports:
+      - "${PWA_PORT:-8091}:8091"
+    networks:
+      - autopilot-net
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: autopilot-worker
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./fonts:/app/fonts
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - APP_TIMEZONE=${APP_TIMEZONE:-Asia/Manila}
+    networks:
+      - autopilot-net
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 4096M
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.bot
+    container_name: autopilot-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - APP_TIMEZONE=${APP_TIMEZONE:-Asia/Manila}
+    networks:
+      - autopilot-net
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  autopilot-net:
+    name: affiliate-autopilot-net
+    driver: bridge

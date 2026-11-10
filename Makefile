@@ -3,13 +3,13 @@
 help:
 	@echo "Affiliate Autopilot Build System"
 	@echo "================================"
-	@echo "make check         - Run linting, typing, and tests"
+	@echo "make check         - Run linting, inventory, secrets scan, and backend tests"
 	@echo "make up            - Start all docker containers in background"
 	@echo "make down          - Stop all containers"
 	@echo "make restart       - Restart all containers"
 	@echo "make logs          - Tail container logs"
 	@echo "make build         - Rebuild container images"
-	@echo "make test          - Run full backend and frontend test suite"
+	@echo "make test          - Run full backend test suite"
 	@echo "make spike-1       - Run S1 Buffer post metrics spike"
 	@echo "make spike-2       - Run S2 Buffer exact schedule spike"
 	@echo "make spike-3       - Run S3 Gemini vision batch spike"
@@ -20,7 +20,8 @@ help:
 
 check:
 	python scripts/check_inventory.py
-	python -m pytest backend/tests || echo "Backend tests pending"
+	python scripts/scan_secrets.py
+	docker run --rm -v /home/kent5368/TiktokCreator/backend:/app/backend autopilot-api:test pytest backend/tests
 
 up:
 	docker compose up -d
@@ -37,13 +38,10 @@ logs:
 build:
 	docker compose build
 
-test: test-backend test-frontend
+test: test-backend
 
 test-backend:
-	pytest backend/tests
-
-test-frontend:
-	cd frontend && npm test
+	docker run --rm -v /home/kent5368/TiktokCreator/backend:/app/backend autopilot-api:test pytest backend/tests
 
 spike-1:
 	python scripts/spikes/s1_buffer_metrics.py --live

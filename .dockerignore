@@ -1,0 +1,14 @@
+legacy_private/
+.git/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+data/
+*.pyc
+__pycache__/
+.env
+.env.*
+*.mp4
+*.mov
+*.mkv
+*.webm
