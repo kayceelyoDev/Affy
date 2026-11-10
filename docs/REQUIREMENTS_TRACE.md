@@ -20,7 +20,7 @@ This matrix tracks every functional and non-functional requirement defined in th
 | **R14** | Built-in Styles 2 to 5 (Minimal, Splits, Problem-Solution, Vlog) | `styles/builtin/` | Style specification and render pipeline | NOT STARTED |
 | **R15** | Style Studio: clone, customize, real-time preview, save style | `backend/app/api/`, `frontend/src/pages/` | Style CRUD test, preview pipeline | NOT STARTED |
 | **R16** | Music library: beat detection, mood/tempo tagging, TikTok audio | `worker/` | Librosa beat detection, yt-dlp spike S5 | IN PROGRESS |
-| **R17** | Catalog: products as folders, clip library, alias resolution | `backend/app/services/storage/`, `frontend/src/pages/Storage.tsx` | StorageProvider contract tests passed | IN PROGRESS |
+| **R17** | Catalog: products as folders, clip library, alias resolution | `backend/app/services/catalog/`, `backend/app/api/catalog.py`, `frontend/src/pages/Products.tsx` | 5 unit/contract tests (`test_b3_catalog.py`), frontend built | **DONE** |
 | **R18** | Scoring engine: Sunday strategy, scorecards, v1 & v2 formulas | `backend/app/services/scoring/` | Formula v1 vs v2 regression tests | NOT STARTED |
 | **R19** | Safety & idempotency: retries, backoff, audit log, locked slots | `LRUCacheManager` (job locks), CSRF middleware | Lock eviction protection test passed | IN PROGRESS |
 | **R20** | Data migration CLI: import from CSVs, shadow mode plan comparison | `scripts/import_from_n8n.py` | Import wizard verified | IN PROGRESS |

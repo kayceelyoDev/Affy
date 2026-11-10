@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Shell } from './components/layout/Shell';
 import { DesignGallery } from './pages/DesignGallery';
 import { StoragePage } from './pages/Storage';
+import { ProductsPage } from './pages/Products';
 
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="max-w-4xl mx-auto space-y-4">
@@ -26,7 +27,7 @@ export const App: React.FC = () => {
           <Route path="/planner" element={<PlaceholderPage title="Today's Plan" subtitle="7x6 Strategy Quota slot allocation, hook assignments, and approval status." />} />
           <Route path="/runs" element={<PlaceholderPage title="Pipeline & Runs" subtitle="Live background job executions, worker statuses, and SSE streaming logs." />} />
           <Route path="/videos" element={<PlaceholderPage title="Video Catalog" subtitle="Rendered assets, Buffer publication status, and clip provenance." />} />
-          <Route path="/products" element={<PlaceholderPage title="Products Master" subtitle="Folder structure, TikTok aliases, clip inventory, and margins." />} />
+          <Route path="/products" element={<ProductsPage />} />
           <Route path="/clips" element={<PlaceholderPage title="Clip Library" subtitle="Raw product footage, metadata tags, and storage sync status." />} />
           <Route path="/styles" element={<PlaceholderPage title="Style Studio" subtitle="Visual editor for Style 1 (Classic Hook) and custom creator templates." />} />
           <Route path="/music" element={<PlaceholderPage title="Music Library" subtitle="Librosa beat-tracked tracks, mood tags, and BPM synchronization." />} />

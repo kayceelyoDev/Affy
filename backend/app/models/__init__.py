@@ -6,6 +6,10 @@ from backend.app.models.models import (
     Run,
     RunLog,
     AuditLog,
+    Product,
+    Clip,
+    Alias,
+    ClipTag,
 )
 
 __all__ = [
@@ -16,4 +20,8 @@ __all__ = [
     "Run",
     "RunLog",
     "AuditLog",
+    "Product",
+    "Clip",
+    "Alias",
+    "ClipTag",
 ]
