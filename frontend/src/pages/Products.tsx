@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Button, Input, Badge } from '../components/ui';
 import { api } from '../api/client';
 import { Plus, Trash2, Edit2, Check, X, Film, AlertTriangle, RefreshCw } from 'lucide-react';
@@ -270,7 +271,13 @@ export const ProductsPage: React.FC = () => {
                   <td>
                     <span className={`inline-block w-1.5 h-1.5 rounded-full ${p.active ? 'bg-emerald-500' : 'bg-neutral-400'}`} />
                   </td>
-                  <td>
+                  <td className="space-x-2 whitespace-nowrap">
+                    <Link
+                      to="/clips"
+                      className="text-[11px] font-medium text-neutral-500 hover:text-black dark:hover:text-white underline"
+                    >
+                      + Add Clips
+                    </Link>
                     <button
                       onClick={() => handleDelete(p)}
                       className="text-neutral-400 hover:text-rose-500 p-1"

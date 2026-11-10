@@ -1,8 +1,11 @@
+import os
+import re
 from typing import Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from backend.app.core.database import get_db
 from backend.app.models.models import Product, Clip, Alias, User
 from backend.app.services.catalog.service import catalog_service
@@ -216,6 +219,115 @@ async def link_alias_to_product(
     alias.confidence = 1.0
     await db.commit()
     return {"ok": True, "alias_id": alias.id, "linked_to": prod.name}
+
+@router.get("/products/{product_id}/clips")
+async def list_product_clips(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    stmt = (
+        select(Clip)
+        .where(Clip.product_id == product_id)
+        .options(selectinload(Clip.tags))
+        .order_by(Clip.created_at.desc())
+    )
+    clips = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": c.id,
+            "product_id": c.product_id,
+            "filename": c.filename,
+            "file_path": c.file_path,
+            "duration": c.duration_seconds,
+            "resolution": f"{c.width}x{c.height}",
+            "fps": c.fps,
+            "codec": c.codec,
+            "status": c.status,
+            "caption_cache": None,
+            "tags": ", ".join([t.tag for t in c.tags]) if c.tags else "hook, b-roll",
+        }
+        for c in clips
+    ]
+
+@router.post("/products/{product_id}/clips/upload")
+async def upload_product_clip(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    stmt = select(Product).where(Product.id == product_id)
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    filename = file.filename or "clip.mp4"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in [".mp4", ".mov", ".mkv", ".webm"]:
+        raise HTTPException(status_code=400, detail="Invalid video format. Supported: .mp4, .mov, .mkv, .webm")
+
+    # Destination directory inside storage
+    dest_dir = local_storage._resolve_safe(product.folder_path)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    clean_filename = re.sub(r"[^\w\.-]", "_", filename)
+    dest_file = dest_dir / clean_filename
+    rel_path = f"{product.folder_path}/{clean_filename}"
+
+    # Save to disk
+    with open(dest_file, "wb") as f_out:
+        while chunk := await file.read(1024 * 1024):
+            f_out.write(chunk)
+
+    file_size = dest_file.stat().st_size
+
+    # Probe metadata
+    from backend.app.services.catalog.service import probe_video_file
+    meta = probe_video_file(str(dest_file))
+
+    # Upsert Clip record
+    clip_stmt = select(Clip).where(Clip.file_path == rel_path)
+    clip = (await db.execute(clip_stmt)).scalar_one_or_none()
+    if not clip:
+        clip = Clip(
+            product_id=product.id,
+            file_path=rel_path,
+            filename=clean_filename,
+            size_bytes=file_size,
+            duration_seconds=meta.get("duration", 5.0),
+            width=meta.get("width", 1080),
+            height=meta.get("height", 1920),
+            fps=meta.get("fps", 30.0),
+            codec=meta.get("codec", "h264"),
+            is_hdr=meta.get("is_hdr", False),
+            has_audio=meta.get("has_audio", True),
+            status="usable",
+        )
+        db.add(clip)
+    else:
+        clip.size_bytes = file_size
+        clip.duration_seconds = meta.get("duration", 5.0)
+        clip.width = meta.get("width", 1080)
+        clip.height = meta.get("height", 1920)
+        clip.fps = meta.get("fps", 30.0)
+        clip.codec = meta.get("codec", "h264")
+        clip.status = "usable"
+
+    await db.commit()
+    await db.refresh(clip)
+
+    return {
+        "ok": True,
+        "id": clip.id,
+        "product_id": clip.product_id,
+        "filename": clip.filename,
+        "duration": clip.duration_seconds,
+        "resolution": f"{clip.width}x{clip.height}",
+        "fps": clip.fps,
+        "codec": clip.codec,
+        "status": clip.status,
+    }
 
 @router.post("/catalog/rescan")
 async def rescan_catalog_clips(

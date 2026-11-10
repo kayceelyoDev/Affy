@@ -136,4 +136,43 @@ async def test_connection(
         except Exception as e:
             return {"ok": False, "service": "buffer", "message": str(e)}
 
+    elif service in ("gdrive", "google_drive", "drive"):
+        raw_sa = await vault_service.get_secret(db, "GOOGLE_DRIVE_SERVICE_ACCOUNT")
+        if not raw_sa:
+            return {
+                "ok": False,
+                "service": "google_drive",
+                "message": "GOOGLE_DRIVE_SERVICE_ACCOUNT not configured in vault.",
+            }
+
+        folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
+        folder_rec = (await db.execute(folder_stmt)).scalar_one_or_none()
+        folder_id = folder_rec.value if folder_rec else None
+
+        import json
+        from backend.app.services.storage.drive_api import test_drive_connection as run_test_drive
+        try:
+            sa_info = json.loads(raw_sa)
+            test_res = await run_test_drive(sa_info, folder_id=folder_id)
+            folder_info = ""
+            if test_res.get("folder"):
+                f = test_res["folder"]
+                if f.get("accessible"):
+                    folder_info = f" | Folder: '{f.get('name')}' ({f.get('item_count')} items)"
+                else:
+                    folder_info = f" | Folder Check Warning: {f.get('error', 'Inaccessible')}"
+            return {
+                "ok": True,
+                "service": "google_drive",
+                "account": test_res.get("account"),
+                "message": f"Connected to Google Drive as {test_res.get('account')}{folder_info}",
+                "details": test_res,
+            }
+        except Exception as e:
+            return {
+                "ok": False,
+                "service": "google_drive",
+                "message": f"Google Drive validation failed: {str(e)}",
+            }
+
     return {"ok": False, "service": service, "message": f"No test harness implemented for service '{service}'."}

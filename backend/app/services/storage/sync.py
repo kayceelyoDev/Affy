@@ -25,8 +25,49 @@ class StorageSyncService:
         error_count = 0
 
         try:
+            from backend.app.core.database import AsyncSessionLocal
+            from backend.app.services.vault import vault_service
+            from backend.app.models.models import Setting
+            from sqlalchemy import select
+
+            async with AsyncSessionLocal() as session:
+                sa_token = await vault_service.get_secret(session, "GOOGLE_DRIVE_SERVICE_ACCOUNT")
+                folder_stmt = select(Setting).where(Setting.key == "GOOGLE_DRIVE_FOLDER_ID")
+                folder_rec = (await session.execute(folder_stmt)).scalar_one_or_none()
+                folder_id = folder_rec.value if folder_rec else None
+
+                if sa_token and folder_id:
+                    import json
+                    from backend.app.services.storage.drive_api import list_drive_subfolders_and_clips, download_file_from_drive
+                    from backend.app.services.catalog.service import catalog_service
+
+                    try:
+                        sa_info = json.loads(sa_token)
+                        drive_items = await list_drive_subfolders_and_clips(sa_info, folder_id)
+                        for item in drive_items:
+                            folder_name = item["folder_name"]
+                            for clip in item["clips"]:
+                                clip_name = clip["name"]
+                                cid = clip["id"]
+                                dest_file = self.local.root / "clips" / folder_name / clip_name
+                                if not dest_file.exists():
+                                    logger.info("Downloading new clip from Drive", folder=folder_name, clip=clip_name)
+                                    await download_file_from_drive(sa_info, cid, dest_file)
+                                    synced_count += 1
+
+                        await catalog_service.scan_clips_directory(session, self.local)
+                        lru_cache.evict_if_needed()
+                        self.last_sync_time = datetime.utcnow()
+                        return {"ok": True, "status": "drive_synced", "synced": synced_count}
+                    except Exception as de:
+                        logger.error("Drive sync error, falling back to local scan", error=str(de))
+
             if not self.remote:
                 # No remote provider configured; local scan and cache maintenance only
+                from backend.app.core.database import AsyncSessionLocal
+                from backend.app.services.catalog.service import catalog_service
+                async with AsyncSessionLocal() as session:
+                    await catalog_service.scan_clips_directory(session, self.local)
                 lru_cache.evict_if_needed()
                 self.last_sync_time = datetime.utcnow()
                 return {"ok": True, "status": "local_only", "synced": 0}
