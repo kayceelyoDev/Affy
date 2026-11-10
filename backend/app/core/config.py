@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     SESSION_MAX_AGE_SECONDS: int = 86400 * 7  # 7 days
     LOGIN_RATE_LIMIT_PER_MINUTE: int = 5
     
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"sqlite+aiosqlite:///{self.DB_PATH.as_posix()}"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

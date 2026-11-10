@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from backend.app.core.config import settings
+from backend.app.core.database import AsyncSessionLocal
 from backend.app.models.models import RenderJob, PlanSlot, Product, Clip, Track
 from backend.app.services.render.engine import RenderEngine
 
@@ -18,8 +19,7 @@ logger = structlog.get_logger("worker")
 class RenderWorker:
     def __init__(self):
         self.engine = RenderEngine()
-        self.db_engine = create_async_engine(settings.DATABASE_URL, echo=False)
-        self.session_factory = async_sessionmaker(self.db_engine, expire_on_commit=False)
+        self.session_factory = AsyncSessionLocal
         self.running = True
 
     async def get_next_job(self, db: AsyncSession) -> Optional[RenderJob]:
