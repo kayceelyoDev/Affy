@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:8090", "http://127.0.0.1:8090", "http://localhost:8091", "http://127.0.0.1:8091"]
     
     # Paths
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
-    DATA_DIR: Path = BASE_DIR / "data"
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent
+    DATA_DIR: Path = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
     DB_PATH: Path = DATA_DIR / "autopilot.db"
     VAULT_KEY_PATH: Path = DATA_DIR / ".vault.key"
     SESSION_KEY_PATH: Path = DATA_DIR / ".session.key"
