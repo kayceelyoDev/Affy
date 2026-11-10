@@ -1,0 +1,16 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''\.env\.example''',
+    '''docs/''',
+    '''legacy_private/''',
+    '''tests/fixtures/synthetic/'''
+]
+regexes = [
+    '''YOUR_[A-Z0-9_]+_HERE''',
+    '''mock-[a-zA-Z0-9_-]+''',
+    '''test-[a-zA-Z0-9_-]+'''
+]
