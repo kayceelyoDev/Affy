@@ -80,3 +80,12 @@ async def run_schedule_now(
     # Trigger job in background
     run_id = await app_scheduler.execute_job(schedule_id, trigger_type="manual")
     return {"ok": True, "schedule_id": schedule_id, "run_id": run_id}
+
+@router.post("/chain")
+async def run_pipeline_chain(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Triggers the full automated pipeline chain (Ingest -> Plan -> Render -> Post)."""
+    run_id = await app_scheduler.execute_chain(trigger_type="manual_chain")
+    return {"ok": True, "chain": "pipeline_chain", "run_id": run_id}

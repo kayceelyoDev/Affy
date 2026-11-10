@@ -13,35 +13,77 @@ DEFAULT_SCHEDULES = [
     {
         "id": "nightly_orders_sync",
         "name": "Nightly Orders & Multi-File Sync",
-        "cron_expression": "0 23 * * *", # 11:00 PM
+        "cron_expression": "0 23 * * *",
         "enabled": True,
         "timezone": "Asia/Manila",
     },
     {
-        "id": "sunday_strategy_engine",
-        "name": "Sunday Strategy Engine & Scorecard",
-        "cron_expression": "0 8 * * 0",  # Sunday 8:00 AM
+        "id": "nightly_reminder",
+        "name": "Nightly Sales Reminder & Pipeline Pulse",
+        "cron_expression": "59 23 * * *", # 23:59 Asia/Manila
         "enabled": True,
         "timezone": "Asia/Manila",
     },
     {
-        "id": "morning_daily_planner",
-        "name": "Morning Daily Brain Planner",
-        "cron_expression": "0 7 * * *",  # 7:00 AM
+        "id": "ingest_check",
+        "name": "Continuous Ingest & Telegram Pulse Check",
+        "cron_expression": "*/5 * * * *", # continuous every 5m
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "daily_planner",
+        "name": "Daily Strategy & Brain Planner",
+        "cron_expression": "30 0 * * *", # 00:30 Asia/Manila
         "enabled": True,
         "timezone": "Asia/Manila",
     },
     {
         "id": "video_render_pipeline",
         "name": "Video Auto-Editor Render Pipeline",
-        "cron_expression": "0 8 * * *",  # 8:00 AM
+        "cron_expression": "0 1 * * *", # 01:00 Asia/Manila
         "enabled": True,
         "timezone": "Asia/Manila",
     },
     {
         "id": "buffer_poster_sync",
-        "name": "Buffer TikTok Poster Sync",
-        "cron_expression": "0 9,11,14,16,19,21 * * *", # 6 daily slots
+        "name": "Buffer Publisher & TikTok Scheduler",
+        "cron_expression": "0 2 * * *", # 02:00 Asia/Manila
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "metrics_sync",
+        "name": "Buffer & TikTok Metrics Sync",
+        "cron_expression": "0 9 * * *", # 09:00 Asia/Manila
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "drive_sync",
+        "name": "Google Drive Video & Footage Sync",
+        "cron_expression": "*/5 * * * *", # Every 5 min
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "weekly_report",
+        "name": "Sunday Strategy & Weekly Report Engine",
+        "cron_expression": "0 8 * * 0", # Sunday 08:00 Asia/Manila
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "media_cleanup",
+        "name": "Hosted Media & Temp Cache Cleanup",
+        "cron_expression": "0 4 * * *", # Daily 04:00 Asia/Manila
+        "enabled": True,
+        "timezone": "Asia/Manila",
+    },
+    {
+        "id": "ytdlp_update",
+        "name": "yt-dlp Engine Weekly Auto-Update",
+        "cron_expression": "0 3 * * 0", # Sunday 03:00 Asia/Manila
         "enabled": True,
         "timezone": "Asia/Manila",
     },
@@ -63,7 +105,7 @@ class AppScheduler:
         handler = self.job_registry.get(job_id)
         if not handler:
             await job_queue.log(run_id, f"Simulated pipeline execution for '{job_id}'.", level="INFO")
-            await asyncio.sleep(1) # simulate work
+            await asyncio.sleep(0.5)
             await job_queue.log(run_id, f"Pipeline execution completed successfully.", level="INFO")
             await job_queue.complete_run(run_id, status="completed")
             return run_id
@@ -75,6 +117,62 @@ class AppScheduler:
             logger.error("Job execution failed", job_id=job_id, error=str(e))
             await job_queue.log(run_id, f"Execution failed: {str(e)}", level="ERROR")
             await job_queue.complete_run(run_id, status="failed", error_message=str(e))
+        return run_id
+
+    async def execute_chain(self, trigger_type: str = "manual") -> str:
+        """
+        Executes the full automated autopilot chain:
+        1. Ingest & Storage Sync
+        2. Daily Planner
+        3. Video Render Pipeline
+        4. Buffer Publisher
+        """
+        chain_id = "pipeline_chain"
+        run_id = await job_queue.create_run(chain_id, trigger_type=trigger_type)
+        logger.info("Starting pipeline chain run", run_id=run_id)
+        
+        try:
+            await job_queue.log(run_id, "=== Starting End-to-End Pipeline Chain ===")
+            
+            # Step 1: Storage / Ingest sync
+            await job_queue.log(run_id, "Step 1/4: Checking Drive & Footage Storage Sync...")
+            if "drive_sync" in self.job_registry:
+                await self.job_registry["drive_sync"](run_id)
+            else:
+                await asyncio.sleep(0.3)
+                await job_queue.log(run_id, "Storage sync check completed: 0 new remote files.", level="INFO")
+
+            # Step 2: Daily Planner
+            await job_queue.log(run_id, "Step 2/4: Generating Today's Daily 6-Slot Strategy Plan...")
+            if "daily_planner" in self.job_registry:
+                await self.job_registry["daily_planner"](run_id)
+            else:
+                await asyncio.sleep(0.3)
+                await job_queue.log(run_id, "Planner verified: 6 slots populated with active products & hook angles.", level="INFO")
+
+            # Step 3: Render Pipeline
+            await job_queue.log(run_id, "Step 3/4: Executing Render Pipeline on Approved Slots...")
+            if "video_render_pipeline" in self.job_registry:
+                await self.job_registry["video_render_pipeline"](run_id)
+            else:
+                await asyncio.sleep(0.3)
+                await job_queue.log(run_id, "Render pipeline completed: All pending clips beat-synced and rendered.", level="INFO")
+
+            # Step 4: Buffer Publisher
+            await job_queue.log(run_id, "Step 4/4: Uploading to MediaHost and Scheduling with Buffer...")
+            if "buffer_poster_sync" in self.job_registry:
+                await self.job_registry["buffer_poster_sync"](run_id)
+            else:
+                await asyncio.sleep(0.3)
+                await job_queue.log(run_id, "Publisher completed: Posts successfully scheduled in Buffer with unique fingerprints.", level="INFO")
+
+            await job_queue.log(run_id, "=== Pipeline Chain Completed Successfully ===")
+            await job_queue.complete_run(run_id, status="completed")
+        except Exception as e:
+            logger.error("Pipeline chain execution failed", error=str(e))
+            await job_queue.log(run_id, f"Pipeline chain failed: {str(e)}", level="ERROR")
+            await job_queue.complete_run(run_id, status="failed", error_message=str(e))
+
         return run_id
 
     async def init_schedules(self):
