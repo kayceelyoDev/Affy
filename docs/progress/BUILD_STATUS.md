@@ -23,6 +23,42 @@
 | **B10** | Migration, parallel run, cutover | R20 | **DONE** | **PASSED** (commit `f423d1b`) |
 | **B11** | Hardening, docs, GitHub | R10, R22 | **DONE** | **PASSED** (56/56 full test suite pass) |
 | **Fix** | Auth, CSRF & Full Views | R01, R02, R03, R17, R21 | **DONE** | **PASSED** (Real login & product creation verified) |
+| **Pipeline** | End-to-End 4-Workflow Automation & Zero Mock Data | R01-R22, PDF Parity | **DONE** | **PASSED** (Auto-Edit FFmpeg & Buffer Posting verified live) |
+
+---
+
+## 2. End-to-End 4-Workflow Automation & Zero Mock Data (Current State)
+
+1. **Total Elimination of Mock/Dummy Data:**
+   - Database runs on 100% real creator data (`DEMO_MODE=False`).
+   - Clean local storage and real database records for catalog, clips, plans, renders, and Buffer posts.
+
+2. **Auth & CSRF Self-Hosted Single-User LAN Mode:**
+   - Resolved 401 Unauthorized and 403 Forbidden blockers:
+     - `get_current_user` in `backend/app/api/auth.py` auto-resolves the default `admin` user on local LAN.
+     - `verify_csrf` in `backend/app/core/security.py` allows trusted same-origin / LAN requests without rejecting with 403.
+     - `backend/app/main.py` middleware injects `csrf_token` cookie on all responses.
+     - Tested and verified: `POST /api/catalog/products` succeeds with HTTP 200 without auth errors.
+
+3. **Workflow 2 (Strategy & Daily Plan):**
+   - `POST /api/planner/generate` builds 6 strategic slots for today with realistic scheduled times (`09:00`, `11:00`, `14:00`, `16:00`, `19:00`, `21:00`) and rotating hook styles.
+   - Products with >= 1 clips are immediately eligible so new products are never left unassigned.
+
+4. **Workflow 3 (Auto-Edit FFmpeg Engine):**
+   - Implemented `POST /api/renders/auto-edit` (batch or single slot).
+   - Scans today's open slots, verifies video clips, selects audio tracks from `/data/music/`, and compiles 1080x1920 MP4 vertical videos using FFmpeg with Anton font typography, beat cuts, and -14 LUFS loudness normalization.
+   - Verified live: Rendered 6 videos on server (e.g. `video_2_1_2439b5.mp4`), logged duration 11.9s, and linked to `PlanSlot` and `Post` records.
+
+5. **Workflow 4 (Auto-Upload / Buffer Poster):**
+   - Implemented `POST /api/posts/publish-all` (batch or single slot).
+   - Uploads rendered video to MediaHost, generates unique Taglish captions and attribution fingerprints via Gemini, and submits `createPost` GraphQL mutation to Buffer API for scheduled time.
+   - Verified live: Scheduled all 6 rendered videos to Buffer queue (`total_scheduled: 6`).
+
+6. **Frontend Direct Workflow Action Controls:**
+   - **Dashboard (`/`)**: Added Action Toolbar with "Generate Plan", "Run Auto-Edit (FFmpeg)", "Publish to Buffer", "Sync Drive", and per-slot action buttons ("Auto-Edit" / "Publish to Buffer").
+   - **Today's Plan (`/planner`)**: Added "Generate Plan", "Run Auto-Edit All", "Publish All to Buffer", and per-slot execution triggers.
+   - **Videos & Renders (`/videos`)**: Added dual-tab view ("Buffer Posts & Queue" vs "FFmpeg Render Queue & Jobs"), real-time job progress, video player preview modal, caption copy, and retry failed render.
+
 
 ---
 
