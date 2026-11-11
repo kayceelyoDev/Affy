@@ -94,12 +94,15 @@ def build_clip_filters(
         effective_crop = "contain_blur" if is_horizontal else "cover"
 
     if effective_crop == "contain_blur":
-        # Ambient blurred glow backdrop + centered foreground with subtle depth
+        # Ambient blurred glow backdrop + centered foreground with clean edge sharpness
         bg_scale = (
             f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=bicubic,"
-            f"crop={width}:{height},boxblur=26:5,eq=brightness=-0.12:contrast=1.05"
+            f"crop={width}:{height},boxblur=26:5,eq=brightness=-0.14:contrast=1.06"
         )
-        fg_scale = f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=bicubic"
+        fg_scale = (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=bicubic,"
+            f"unsharp=3:3:0.6:3:3:0.0"
+        )
         f.append(
             f"split=2[fg][bg];[bg]{bg_scale}[bg_blur];[fg]{fg_scale}[fg_scaled];"
             f"[bg_blur][fg_scaled]overlay=(W-w)/2:(H-h)/2"
@@ -112,59 +115,54 @@ def build_clip_filters(
         )
         f.append(f"crop={width}:{height}")
 
-    # 3. Professional Motion & Beat-Synced Transition Effects
+    # 3. Professional Motion & Beat-Synced Transition Effects (Clean & Flash-Free)
     seg_dur = max(0.4, n_frames / fps)
     frames_den = max(1, n_frames)
 
     if motion_type == "zoom_punch" or style_id in ("punchy_zoom", "punchy"):
-        # TikTok Affiliate Pro Fast-Paced Cut Cycle (Inspired by @maica.basket):
-        # Cut 0: Scroll-stopping snap punch (1.28x -> 1.0x) + optical white flash hit
-        # Cut 1: Dynamic whip pan left (+60px entry) + flash hit + punch settle
-        # Cut 2: Macro feature zoom-in (1.04x -> 1.20x focus) + optical cut flash
-        # Cut 3: Dynamic whip pan right (-60px entry) + flash hit + punch settle
-        # Cut 4: Pull-back reveal (1.20x -> 1.0x overview) + optical cut flash
+        # TikTok Affiliate Kinetic Pro Cut Cycle (No white flashes - pure professional camera motion):
+        # Cut 0: Scroll-stopping snap punch with ease-out (1.18x -> 1.0x in 7 frames)
+        # Cut 1: Dynamic whip pan left swish (+40px lateral entry) + snap settle
+        # Cut 2: Tactile macro detail push-in (1.02x -> 1.16x forward tracking)
+        # Cut 3: Dynamic whip pan right swish (-40px lateral entry) + snap settle
+        # Cut 4: Cinematic pull-back overview reveal (1.16x -> 1.0x reverse tracking)
         mode_idx = seg_idx % 5
         if mode_idx == 0:
-            # Explosive beat punch zoom
-            f.append(f"zoompan=z='if(lte(on,8),1.28-0.035*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-            f.append("fade=t=in:st=0:d=0.08:color=white")
+            # Kinetic beat snap zoom
+            f.append(f"zoompan=z='if(lte(on,7),1.18-0.025*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 1:
-            # Dynamic Whip-in Left (swish from right)
-            f.append(f"zoompan=z='if(lte(on,8),1.18-0.022*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)+(6-on)*10,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-            f.append("fade=t=in:st=0:d=0.06:color=white")
+            # Dynamic Whip-in Left (seamless swish from right into center)
+            f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)+(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 2:
-            # Macro Feature Zoom-In (tactile product focus)
-            f.append(f"zoompan=z='min(1.20, 1.04 + (0.16/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-            f.append("fade=t=in:st=0:d=0.05:color=white")
+            # Macro Feature Zoom-In (forward push on buttons, textures, ports)
+            f.append(f"zoompan=z='min(1.16, 1.02 + (0.14/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 3:
-            # Dynamic Whip-in Right (swish from left)
-            f.append(f"zoompan=z='if(lte(on,8),1.18-0.022*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)-(6-on)*10,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-            f.append("fade=t=in:st=0:d=0.06:color=white")
+            # Dynamic Whip-in Right (seamless swish from left into center)
+            f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)-(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         else:
-            # Pull-Back Product Overview Reveal
-            f.append(f"zoompan=z='max(1.0, 1.20 - (0.20/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-            f.append("fade=t=in:st=0:d=0.05:color=white")
+            # Pull-Back Product Overview Reveal (steady smooth pull-back)
+            f.append(f"zoompan=z='max(1.0, 1.16 - (0.16/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 
-        # High-converting TikTok affiliate color grading pop
-        f.append("eq=contrast=1.07:saturation=1.14:brightness=0.01")
+        # High-converting TikTok affiliate color grading pop + crisp edge sharpening
+        f.append("eq=contrast=1.06:saturation=1.12:brightness=0.01,unsharp=3:3:0.6:3:3:0.0")
 
     elif motion_type in ("smooth_flow", "smooth_drift") or style_id in ("smooth_flow", "smooth"):
         # TikTok Aesthetic Continuous Luxury Gimbal Drift (Inspired by @enchanted.roseee):
-        # Segment 0: Luxury slow glide zoom in (1.0 -> 1.10)
+        # Segment 0: Luxury slow glide zoom in (1.0 -> 1.09)
         # Segment 1: Motorized continuous gimbal pan left
-        # Segment 2: Cinematic pull-back drift (1.10 -> 1.0)
+        # Segment 2: Cinematic pull-back drift (1.09 -> 1.0)
         # Segment 3: Motorized continuous gimbal pan right
         mode_idx = seg_idx % 4
         if mode_idx == 0:
-            f.append(f"zoompan=z='min(1.10, 1.0 + (0.10/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 1:
-            f.append(f"zoompan=z=1.06:d=1:x='iw/2-(iw/zoom/2)-(on/{frames_den})*40':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z=1.05:d=1:x='iw/2-(iw/zoom/2)-(on/{frames_den})*35':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 2:
-            f.append(f"zoompan=z='max(1.0, 1.10 - (0.10/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z='max(1.0, 1.09 - (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         else:
-            f.append(f"zoompan=z=1.06:d=1:x='iw/2-(iw/zoom/2)+(on/{frames_den})*40':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z=1.05:d=1:x='iw/2-(iw/zoom/2)+(on/{frames_den})*35':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 
-        # Silky soft dissolved crossfade on each cut
+        # Silky soft dissolved crossfade on each cut (film-like dissolve, zero harshness)
         fade_d = min(0.12, max(0.06, seg_dur * 0.08))
         fade_out_st = max(0.0, seg_dur - fade_d)
         f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")
@@ -173,7 +171,7 @@ def build_clip_filters(
         f.append("eq=contrast=1.05:saturation=1.08:brightness=0.01,vignette=PI/5")
 
     elif motion_type == "slow_zoom":
-        f.append(f"zoompan=z='min(1.10, 1.0 + (0.10/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         fade_d = min(0.15, max(0.06, seg_dur * 0.08))
         fade_out_st = max(0.0, seg_dur - fade_d)
         f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")

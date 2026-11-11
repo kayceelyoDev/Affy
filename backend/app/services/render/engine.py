@@ -77,10 +77,15 @@ class RenderEngine:
         plan = []
         for c, d in zip(clips, durations):
             dur = c["dur"]
-            if dur >= d + 0.6:
-                start = random.uniform(0.3, dur - d - 0.2)
+            # Target the active 15% to 65% sweet spot of creator footage (bypasses static phone setup time)
+            if dur >= d + 1.2:
+                min_start = max(0.4, dur * 0.15)
+                max_start = max(min_start, dur * 0.70 - d)
+                start = random.uniform(min_start, max_start)
+            elif dur >= d + 0.4:
+                start = random.uniform(0.2, dur - d - 0.1)
             else:
-                start = max(0.0, min(0.3, dur - d))
+                start = max(0.0, (dur - d) / 2.0)
             plan.append((c, start))
         return plan
 

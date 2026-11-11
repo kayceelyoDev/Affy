@@ -1,8 +1,8 @@
 {
   "id": "punchy_zoom",
   "name": "Punchy Zoom",
-  "version": "1.1",
-  "description": "High-energy fast cuts (1.0 to 1.4s), explosive beat snap zoom, optical white flashes, dynamic whip pans, and bold TikTok yellow Anton typography.",
+  "version": "1.2",
+  "description": "High-energy fast cuts (1.0 to 1.4s), kinetic beat snap zoom, seamless directional whip pans, macro detail focus, and bold TikTok yellow Anton typography (clean and flash-free).",
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -29,8 +29,7 @@
     "transitions": [
       { "type": "zoomin", "duration": 0.15, "weight": 2.0 },
       { "type": "whipleft", "duration": 0.15, "weight": 1.5 },
-      { "type": "whipright", "duration": 0.15, "weight": 1.5 },
-      { "type": "flash", "duration": 0.08, "weight": 2.0 }
+      { "type": "whipright", "duration": 0.15, "weight": 1.5 }
     ]
   },
   "text_layers": [
@@ -75,7 +74,7 @@
   "graphics": [],
   "motion": {
     "type": "zoom_punch",
-    "intensity": 1.20
+    "intensity": 1.15
   },
   "audio": {
     "target_lufs": -13.5,

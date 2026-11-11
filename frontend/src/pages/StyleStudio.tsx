@@ -876,7 +876,7 @@ export const StyleStudioPage: React.FC = () => {
                       <div className="text-[11px] font-medium text-neutral-400">Cut Transition Effect</div>
                       <div className="text-xs font-semibold text-neutral-200">
                         {selectedStyle.id === 'punchy_zoom'
-                          ? 'Optical White Flash Hit on Beat Drop (0.08s)'
+                          ? 'Kinetic Beat Snap & Seamless Directional Swish (Clean, Flash-Free)'
                           : selectedStyle.id === 'smooth_flow'
                           ? 'Silky Soft Dissolve & Seamless Crossfade'
                           : selectedStyle.id === 'clean_showcase'
