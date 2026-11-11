@@ -1,8 +1,8 @@
 {
   "id": "classic_hook",
   "name": "Classic Hook",
-  "version": "1.0",
-  "description": "Original high-conversion TikTok affiliate style: Anton bold font, warm yellow hook, white subtitle, beat-synced hard cuts without effects.",
+  "version": "1.1",
+  "description": "Original high-conversion TikTok affiliate style: Anton bold font, warm yellow hook, white subtitle, beat-synced hard cuts with auto-framing.",
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -17,7 +17,7 @@
     "target_seg": 2.2,
     "min_duration": 10.0,
     "max_duration": 28.0,
-    "crop_mode": "cover"
+    "crop_mode": "auto"
   },
   "cut_logic": {
     "mode": "beat_synced",
@@ -39,11 +39,11 @@
       "name": "title",
       "font_file": "fonts/Anton-Regular.ttf",
       "color": "0xEFD34C",
-      "stroke_color": "black@0.9",
-      "stroke_width": 2,
+      "stroke_color": "black@0.95",
+      "stroke_width": 5,
       "position_y": 230,
       "max_size": 125,
-      "width_ratio": 0.78,
+      "width_ratio": 0.82,
       "box": false,
       "animation": "none"
     },
@@ -51,11 +51,11 @@
       "name": "subtitle",
       "font_file": "fonts/Anton-Regular.ttf",
       "color": "white",
-      "stroke_color": "black@0.9",
-      "stroke_width": 2,
+      "stroke_color": "black@0.95",
+      "stroke_width": 4,
       "position_y": 360,
-      "max_size": 125,
-      "width_ratio": 0.78,
+      "max_size": 115,
+      "width_ratio": 0.82,
       "box": false,
       "animation": "none"
     }

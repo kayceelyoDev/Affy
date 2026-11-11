@@ -94,7 +94,7 @@ def compile_text_filters(
         size = fit_font_size(lines, max_w, title_layer.max_size, layer_font)
         cap = int(size * 0.86)
         gap = int(cap * 0.40)
-        stroke = max(2, size // 55)
+        stroke = max(4, size // 22)
         
         y = title_layer.position_y
         for i, text_val in enumerate(lines):
@@ -103,20 +103,25 @@ def compile_text_filters(
             
             color = title_layer.color if i == 0 else (sub_layer.color if sub_layer else "white")
             alpha_expr = ""
-            anim = title_layer.animation or ("pop_in" if spec.id == "punchy_zoom" else ("fade_out_2s" if spec.id == "smooth_flow" else "none"))
+            anim = title_layer.animation or ("pop_in" if spec.id in ("punchy_zoom", "punchy") else ("fade_out_2s" if spec.id in ("smooth_flow", "smooth") else "none"))
             if anim == "fade_out_2s":
-                alpha_expr = ":alpha='if(lt(t,2.2),min(t/0.35,1),max(0,1-(t-2.2)/0.4))'"
+                alpha_expr = ":alpha='if(lt(t,2.2),min(t/0.30,1),max(0,1-(t-2.2)/0.4))'"
             elif anim == "fade_in":
-                alpha_expr = ":alpha='min(t/0.35,1)'"
+                alpha_expr = ":alpha='min(t/0.30,1)'"
             elif anim == "pop_in":
                 alpha_expr = ":alpha='if(lt(t,0.06),0,1)'"
                 
+            box_expr = ""
+            if title_layer.box:
+                box_expr = f":box=1:boxcolor={title_layer.box_color or 'black@0.45'}:boxborderw={title_layer.box_border_w or 10}"
+
             filters.append(
                 f"drawtext=fontfile='{ffmpeg_escape_path(Path(layer_font))}':"
                 f"textfile='{ffmpeg_escape_path(t_file)}':"
                 f"fontsize={size}:fontcolor={color}:"
                 f"borderw={stroke}:bordercolor={title_layer.stroke_color}:"
-                f"x=(w-text_w)/2:y={y}{alpha_expr}"
+                f"shadowcolor=black@0.85:shadowx=3:shadowy=4:"
+                f"x=(w-text_w)/2:y={y}{box_expr}{alpha_expr}"
             )
             y += cap + gap + int(size * 0.14)
 

@@ -176,12 +176,33 @@ export const StyleStudioPage: React.FC = () => {
   const handleUpdateLayer = (layerName: string, updates: Partial<TextLayerConfig>) => {
     if (!selectedStyle) return;
     const currentLayers = selectedStyle.spec?.text_layers || [];
-    const updatedLayers = currentLayers.map((layer) => {
-      if (layer.name === layerName) {
-        return { ...layer, ...updates };
-      }
-      return layer;
-    });
+    const exists = currentLayers.some((l) => l.name === layerName);
+    let updatedLayers;
+    if (exists) {
+      updatedLayers = currentLayers.map((layer) => {
+        if (layer.name === layerName) {
+          return { ...layer, ...updates };
+        }
+        return layer;
+      });
+    } else {
+      updatedLayers = [
+        ...currentLayers,
+        {
+          name: layerName,
+          font_file: 'fonts/Anton-Regular.ttf',
+          color: '#FFFFFF',
+          stroke_color: 'black@0.95',
+          stroke_width: 4,
+          position_y: layerName === 'subtitle' ? 380 : 960,
+          max_size: 110,
+          width_ratio: 0.82,
+          box: false,
+          animation: 'none',
+          ...updates,
+        },
+      ];
+    }
 
     const updatedStyle: StyleSpecData = {
       ...selectedStyle,
@@ -191,6 +212,23 @@ export const StyleStudioPage: React.FC = () => {
       },
     };
 
+    setSelectedStyle(updatedStyle);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleCropModeChange = (mode: string) => {
+    if (!selectedStyle) return;
+    const updatedStyle: StyleSpecData = {
+      ...selectedStyle,
+      crop_mode: mode,
+      spec: {
+        ...selectedStyle.spec,
+        clip_rules: {
+          ...selectedStyle.spec?.clip_rules,
+          crop_mode: mode,
+        },
+      },
+    };
     setSelectedStyle(updatedStyle);
     setHasUnsavedChanges(true);
   };
@@ -377,8 +415,11 @@ export const StyleStudioPage: React.FC = () => {
   };
 
   const titleLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'title');
+  const subtitleLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'subtitle');
   const captionLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'clip_caption');
   const ctaLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'cta');
+  const secondaryLayer = subtitleLayer || captionLayer;
+  const secondaryLayerName = subtitleLayer ? 'subtitle' : (captionLayer ? 'clip_caption' : 'subtitle');
 
   return (
     <div className="space-y-6">
@@ -548,12 +589,12 @@ export const StyleStudioPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Asset Sources (Product & Music) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Asset Sources (Product, Music & Universal Framing Mode) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
                     <Folder className="w-3.5 h-3.5 text-neutral-400" />
-                    Product Vertical Footage
+                    Product Footage
                   </label>
                   <select
                     value={selectedProductId || ''}
@@ -586,6 +627,28 @@ export const StyleStudioPage: React.FC = () => {
                         {t.name} ({t.size_kb} KB)
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5 text-neutral-400" />
+                    Framing / Crop Mode
+                  </label>
+                  <select
+                    value={selectedStyle.spec?.clip_rules?.crop_mode || selectedStyle.crop_mode || 'auto'}
+                    onChange={(e) => handleCropModeChange(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-3 py-2 text-xs text-neutral-100 focus:outline-none focus:border-neutral-600 cursor-pointer"
+                  >
+                    <option value="auto" className="bg-neutral-900 text-neutral-100">
+                      Auto (Smart Ambient Glow for Landscape, Full Bleed for Vertical)
+                    </option>
+                    <option value="contain_blur" className="bg-neutral-900 text-neutral-100">
+                      Contain Blur (Ambient Glow Backdrop)
+                    </option>
+                    <option value="cover" className="bg-neutral-900 text-neutral-100">
+                      Full Bleed Cover (Classic Zoom Crop)
+                    </option>
                   </select>
                 </div>
               </div>
@@ -705,14 +768,14 @@ export const StyleStudioPage: React.FC = () => {
                 )}
 
                 {/* Subtitle / Caption Layer Editor */}
-                {captionLayer && (
+                {secondaryLayer && (
                   <div className="p-3.5 rounded-lg border border-neutral-800 bg-neutral-900/50 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-neutral-200 uppercase tracking-wider">
-                        Clip Caption / Subhook Layer
+                        {secondaryLayerName === 'subtitle' ? 'Subtitle / Line 2 Subhook' : 'Clip Caption Layer'}
                       </span>
                       <span className="text-[11px] font-mono text-neutral-400">
-                        Y: {captionLayer.position_y}px | Size: {captionLayer.max_size}px
+                        Y: {secondaryLayer.position_y}px | Size: {secondaryLayer.max_size}px
                       </span>
                     </div>
 
@@ -720,11 +783,11 @@ export const StyleStudioPage: React.FC = () => {
                       <label className="text-[11px] text-neutral-400">Color Palette</label>
                       <div className="flex flex-wrap items-center gap-2">
                         {PRESET_COLORS.map((c) => {
-                          const isActive = normalizeHexColor(captionLayer.color).toLowerCase() === c.hex.toLowerCase();
+                          const isActive = normalizeHexColor(secondaryLayer.color).toLowerCase() === c.hex.toLowerCase();
                           return (
                             <button
                               key={c.hex}
-                              onClick={() => handleUpdateLayer('clip_caption', { color: formatColorForFFmpeg(c.hex) })}
+                              onClick={() => handleUpdateLayer(secondaryLayerName, { color: formatColorForFFmpeg(c.hex) })}
                               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border transition ${
                                 isActive ? 'border-white bg-neutral-800 text-white font-medium' : 'border-neutral-800 text-neutral-400 hover:border-neutral-600'
                               }`}
@@ -737,12 +800,12 @@ export const StyleStudioPage: React.FC = () => {
                         <div className="flex items-center gap-1 ml-auto">
                           <input
                             type="color"
-                            value={normalizeHexColor(captionLayer.color)}
-                            onChange={(e) => handleUpdateLayer('clip_caption', { color: formatColorForFFmpeg(e.target.value) })}
+                            value={normalizeHexColor(secondaryLayer.color)}
+                            onChange={(e) => handleUpdateLayer(secondaryLayerName, { color: formatColorForFFmpeg(e.target.value) })}
                             className="w-6 h-6 rounded border-0 bg-transparent cursor-pointer"
                           />
                           <span className="font-mono text-xs text-neutral-400">
-                            {normalizeHexColor(captionLayer.color).toUpperCase()}
+                            {normalizeHexColor(secondaryLayer.color).toUpperCase()}
                           </span>
                         </div>
                       </div>
@@ -752,15 +815,15 @@ export const StyleStudioPage: React.FC = () => {
                       <div className="space-y-1">
                         <div className="flex justify-between text-[11px] text-neutral-400">
                           <span>Max Font Size</span>
-                          <span className="font-mono">{captionLayer.max_size}px</span>
+                          <span className="font-mono">{secondaryLayer.max_size}px</span>
                         </div>
                         <input
                           type="range"
                           min="40"
-                          max="120"
+                          max="140"
                           step="2"
-                          value={captionLayer.max_size}
-                          onChange={(e) => handleUpdateLayer('clip_caption', { max_size: Number(e.target.value) })}
+                          value={secondaryLayer.max_size}
+                          onChange={(e) => handleUpdateLayer(secondaryLayerName, { max_size: Number(e.target.value) })}
                           className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                         />
                       </div>
@@ -768,15 +831,15 @@ export const StyleStudioPage: React.FC = () => {
                       <div className="space-y-1">
                         <div className="flex justify-between text-[11px] text-neutral-400">
                           <span>Vertical Position (Y)</span>
-                          <span className="font-mono">{captionLayer.position_y}px</span>
+                          <span className="font-mono">{secondaryLayer.position_y}px</span>
                         </div>
                         <input
                           type="range"
                           min="150"
                           max="1750"
                           step="10"
-                          value={captionLayer.position_y}
-                          onChange={(e) => handleUpdateLayer('clip_caption', { position_y: Number(e.target.value) })}
+                          value={secondaryLayer.position_y}
+                          onChange={(e) => handleUpdateLayer(secondaryLayerName, { position_y: Number(e.target.value) })}
                           className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                         />
                       </div>
@@ -800,9 +863,9 @@ export const StyleStudioPage: React.FC = () => {
                       <div className="text-[11px] font-medium text-neutral-400">Camera Motion Sequence</div>
                       <div className="text-xs font-semibold text-neutral-200">
                         {selectedStyle.id === 'punchy_zoom'
-                          ? 'Beat Punch (1.28x) + Whip Pan & Pull-Back Reveal'
+                          ? 'Explosive Snap Punch (1.28x) + Whip Pans & Macro Zoom'
                           : selectedStyle.id === 'smooth_flow'
-                          ? '4-Way Motorized Gimbal Drift (Zoom + Pan L/R)'
+                          ? '4-Way Continuous Luxury Gimbal Drift (Zoom + Pan L/R)'
                           : selectedStyle.id === 'clean_showcase'
                           ? 'Ambient Blur Backdrop + Slow Float'
                           : 'High-Conversion Slide + CTA Pop'}
@@ -813,7 +876,7 @@ export const StyleStudioPage: React.FC = () => {
                       <div className="text-[11px] font-medium text-neutral-400">Cut Transition Effect</div>
                       <div className="text-xs font-semibold text-neutral-200">
                         {selectedStyle.id === 'punchy_zoom'
-                          ? 'Optical White Impact Flash on Beat Drop'
+                          ? 'Optical White Flash Hit on Beat Drop (0.08s)'
                           : selectedStyle.id === 'smooth_flow'
                           ? 'Silky Soft Dissolve & Seamless Crossfade'
                           : selectedStyle.id === 'clean_showcase'
@@ -828,7 +891,7 @@ export const StyleStudioPage: React.FC = () => {
                     <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
                       <span className="text-neutral-500 block">Cut Timing</span>
                       <span className="font-semibold text-neutral-200">
-                        {selectedStyle.id === 'punchy_zoom' ? 'Fast (1.2s – 2 Beats)' : selectedStyle.id === 'smooth_flow' ? 'Melodic (2.8s – 4 Beats)' : '2.2s Beat-Synced'}
+                        {selectedStyle.id === 'punchy_zoom' ? 'Fast (1.3s – 2 Beats)' : selectedStyle.id === 'smooth_flow' ? 'Melodic (2.6s – 4 Beats)' : '2.2s Beat-Synced'}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
@@ -927,36 +990,38 @@ export const StyleStudioPage: React.FC = () => {
                 </div>
 
                 {/* Draggable Subtitle / Caption Layer */}
-                <div
-                  onMouseDown={() => setDraggingLayer('clip_caption')}
-                  style={{
-                    position: 'absolute',
-                    top: `${((captionLayer?.position_y || 380) / 1920) * 100}%`,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '90%',
-                    cursor: 'grab',
-                  }}
-                  className={`group select-none transition-shadow rounded p-1 ${
-                    draggingLayer === 'clip_caption' ? 'ring-1 ring-white bg-white/10' : 'hover:ring-1 hover:ring-neutral-600'
-                  }`}
-                  title="Click and drag up or down to reposition"
-                >
+                {secondaryLayer && (
                   <div
-                    className="font-bold tracking-tight text-center drop-shadow-md text-white leading-tight"
+                    onMouseDown={() => setDraggingLayer(secondaryLayerName)}
                     style={{
-                      fontFamily: 'Impact, Anton, sans-serif',
-                      color: normalizeHexColor(captionLayer?.color || '#FFFFFF'),
-                      fontSize: `${Math.round(((captionLayer?.max_size || 90) / 1080) * 280)}px`,
-                      WebkitTextStroke: '1px black',
+                      position: 'absolute',
+                      top: `${(((secondaryLayer?.position_y || 380) / 1920) * 100)}%`,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: '90%',
+                      cursor: 'grab',
                     }}
+                    className={`group select-none transition-shadow rounded p-1 ${
+                      draggingLayer === secondaryLayerName ? 'ring-1 ring-white bg-white/10' : 'hover:ring-1 hover:ring-neutral-600'
+                    }`}
+                    title="Click and drag up or down to reposition"
                   >
-                    {subtitleText}
+                    <div
+                      className="font-bold tracking-tight text-center drop-shadow-md text-white leading-tight"
+                      style={{
+                        fontFamily: 'Impact, Anton, sans-serif',
+                        color: normalizeHexColor(secondaryLayer?.color || '#FFFFFF'),
+                        fontSize: `${Math.round((((secondaryLayer?.max_size || 90) / 1080) * 280))}px`,
+                        WebkitTextStroke: '1px black',
+                      }}
+                    >
+                      {subtitleText}
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition text-[9px] text-neutral-400 font-mono mt-0.5 flex items-center justify-center gap-1">
+                      <Move className="w-2.5 h-2.5" /> Drag Y: {secondaryLayer?.position_y}px
+                    </div>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition text-[9px] text-neutral-400 font-mono mt-0.5 flex items-center justify-center gap-1">
-                    <Move className="w-2.5 h-2.5" /> Drag Y: {captionLayer?.position_y}px
-                  </div>
-                </div>
+                )}
 
                 {/* Bottom CTA Layer (if present in style) */}
                 {ctaLayer && (
