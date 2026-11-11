@@ -130,13 +130,21 @@ class RenderEngine:
         spec: StyleSpec,
         seg_idx: int = 0,
         total_segs: int = 1,
+        motion_type: Optional[str] = None,
+        transition_type: Optional[str] = None,
+        crop_mode: Optional[str] = None,
     ):
+        eff_crop = crop_mode or spec.clip_rules.crop_mode
+        eff_motion = motion_type or spec.motion.type
+        eff_trans = transition_type or "none"
+
         vf = build_clip_filters(
             clip=clip,
             n_frames=n_frames,
             text_filter=text_filter,
-            crop_mode=spec.clip_rules.crop_mode,
-            motion_type=spec.motion.type,
+            crop_mode=eff_crop,
+            motion_type=eff_motion,
+            transition_type=eff_trans,
             motion_intensity=spec.motion.intensity,
             fps=spec.canvas.fps,
             width=spec.canvas.width,
@@ -197,9 +205,9 @@ class RenderEngine:
             if abs(durations["audio"] - durations["video"]) > 0.4:
                 problems.append(f"audio {durations['audio']:.1f}s vs video {durations['video']:.1f}s")
 
-        # Check black frames (threshold 0.40s avoids false positives on intentional transition dips)
+        # Check black frames (threshold 0.40s and pix_th=0.02 detects actual unrendered black without false positives on deep blue footage)
         b = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-i", str(path), "-vf", "blackdetect=d=0.40:pix_th=0.04", "-an", "-f", "null", "-"],
+            ["ffmpeg", "-hide_banner", "-i", str(path), "-vf", "blackdetect=d=0.40:pix_th=0.02", "-an", "-f", "null", "-"],
             capture_output=True, text=True
         ).stderr
         if re.search(r"black_start", b):
@@ -227,8 +235,10 @@ class RenderEngine:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         spec = self.get_style(style_id)
 
-        # 0. Resolve fixed audio if using a Template
+        # 0. Resolve fixed audio and template timeline blueprint
         tpl = get_template_by_id(style_id)
+        has_template_slots = bool(tpl and tpl.get("slots") and len(tpl["slots"]) > 0)
+
         if tpl and tpl.get("fixed_music_track"):
             fixed_file = tpl["fixed_music_track"]
             for mdir in [Path("data/music"), Path("/app/data/music"), Path("backend/data/music"), Path("legacy_private/video-editor/music")]:
@@ -259,29 +269,46 @@ class RenderEngine:
         attempts = 3
         for attempt in range(1, attempts + 1):
             try:
-                t0, cuts, used_clips, bpc = plan_cuts(
-                    clips=clips,
-                    beats=beats,
-                    tempo=tempo,
-                    music_len=music_len,
-                    target_seg=spec.clip_rules.target_seg,
-                    min_dur=min_dur,
-                    max_dur=max_dur,
-                )
-
-                fps = spec.canvas.fps
-                frames = [round(t * fps) for t in cuts]
-                seg_frames = [b - a for a, b in zip(frames, frames[1:])]
-                plan = self.assign_segments(used_clips, [n / fps for n in seg_frames])
+                if has_template_slots:
+                    # Strict CapCut template timeline: cuts, durations, motions & transitions are strictly locked
+                    template_slots = tpl["slots"]
+                    durations = [max(0.3, float(s.get("duration", 1.2))) for s in template_slots]
+                    used_clips = [clips[i % len(clips)] for i in range(len(durations))]
+                    t0 = 0.0
+                    bpc = 1
+                    fps = spec.canvas.fps
+                    seg_frames = [round(d * fps) for d in durations]
+                    plan = self.assign_segments(used_clips, durations)
+                else:
+                    t0, cuts, used_clips, bpc = plan_cuts(
+                        clips=clips,
+                        beats=beats,
+                        tempo=tempo,
+                        music_len=music_len,
+                        target_seg=spec.clip_rules.target_seg,
+                        min_dur=min_dur,
+                        max_dur=max_dur,
+                    )
+                    fps = spec.canvas.fps
+                    frames = [round(t * fps) for t in cuts]
+                    seg_frames = [b - a for a, b in zip(frames, frames[1:])]
+                    plan = self.assign_segments(used_clips, [n / fps for n in seg_frames])
 
                 with tempfile.TemporaryDirectory() as workdir:
                     work = Path(workdir)
-                    text_filter = compile_text_filters(spec, title, subtitle, work)
+                    text_filter = compile_text_filters(
+                        spec,
+                        title,
+                        subtitle,
+                        work,
+                        tpl=tpl if has_template_slots else None,
+                    )
                     joined = work / "all.h264"
                     
                     with open(joined, "wb") as out_h264:
                         for idx, ((clip, start), n) in enumerate(zip(plan, seg_frames)):
                             seg = work / f"seg_{idx:03d}.h264"
+                            slot_cfg = template_slots[idx] if has_template_slots and idx < len(template_slots) else {}
                             self.render_segment(
                                 clip=clip,
                                 start=start,
@@ -291,6 +318,9 @@ class RenderEngine:
                                 spec=spec,
                                 seg_idx=idx,
                                 total_segs=len(plan),
+                                motion_type=slot_cfg.get("motion"),
+                                transition_type=slot_cfg.get("transition"),
+                                crop_mode=slot_cfg.get("crop_mode") or (tpl.get("crop_mode") if has_template_slots else None),
                             )
                             out_h264.write(seg.read_bytes())
                             seg.unlink()

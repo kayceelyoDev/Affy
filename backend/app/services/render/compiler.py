@@ -73,6 +73,7 @@ def compile_text_filters(
     subtitle: str,
     workdir: Path,
     clip_caption: str = "",
+    tpl: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Compiles typography and overlay layers into FFmpeg drawtext filter string."""
     filters = []
@@ -84,6 +85,14 @@ def compile_text_filters(
     caption_layer = next((l for l in spec.text_layers if l.name == "clip_caption"), None)
     cta_layer = next((l for l in spec.text_layers if l.name == "cta"), None)
 
+    # Override layers if template specified custom styling
+    title_color = tpl.get("title_color") if tpl else None
+    title_size = tpl.get("title_font_size") if tpl else None
+    title_y = tpl.get("title_y") if tpl else None
+    sub_color = tpl.get("subtitle_color") if tpl else None
+    sub_size = tpl.get("subtitle_font_size") if tpl else None
+    sub_y = tpl.get("subtitle_y") if tpl else None
+
     # 1. Title and Subtitle processing
     if title_layer:
         max_w = int(w * title_layer.width_ratio)
@@ -91,17 +100,22 @@ def compile_text_filters(
         t1, t2 = prepare_title_lines(title, subtitle, max_w, layer_font)
         
         lines = [t for t in (t1, t2) if t]
-        size = fit_font_size(lines, max_w, title_layer.max_size, layer_font)
+        effective_start_size = title_size if title_size else title_layer.max_size
+        size = fit_font_size(lines, max_w, effective_start_size, layer_font)
         cap = int(size * 0.86)
         gap = int(cap * 0.40)
         stroke = max(4, size // 22)
         
-        y = title_layer.position_y
+        y = title_y if title_y is not None else title_layer.position_y
         for i, text_val in enumerate(lines):
             t_file = workdir / f"t_{i}.txt"
             t_file.write_text(text_val, encoding="utf-8")
             
-            raw_color = title_layer.color if i == 0 else (sub_layer.color if sub_layer else "white")
+            if i == 0:
+                raw_color = title_color if title_color else title_layer.color
+            else:
+                raw_color = sub_color if sub_color else (sub_layer.color if sub_layer else "white")
+
             color = raw_color.replace("#", "0x") if raw_color.startswith("#") else raw_color
             alpha_expr = ""
             anim = title_layer.animation or "none"

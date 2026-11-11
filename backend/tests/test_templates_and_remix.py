@@ -131,3 +131,57 @@ async def test_reset_data_endpoint_preserves_secrets_and_settings(auth_client: A
         # Verify Setting is completely intact
         after_setting_cnt = len((await db.execute(select(Setting))).scalars().all())
         assert after_setting_cnt == setting_cnt
+
+@pytest.mark.asyncio
+async def test_template_slots_blueprint_and_render_engine(auth_client: AsyncClient):
+    """Verifies CapCut template timeline slots structure and exact slot timeline adherence."""
+    from backend.app.services.render.engine import RenderEngine
+    import tempfile
+    import subprocess
+    from pathlib import Path
+
+    # 1. API returns slots for all default templates
+    res = await auth_client.get("/api/styles/templates")
+    assert res.status_code == 200
+    tpls = res.json()
+    
+    viral = next(t for t in tpls if t["id"] == "tpl_viral_deal_drop")
+    assert "slots" in viral
+    assert len(viral["slots"]) == 5
+    assert viral["slots"][0]["transition"] == "snap_zoom"
+    assert viral["slots"][0]["motion"] == "zoom_punch"
+    assert viral["slots"][0]["duration"] == 1.2
+    assert viral["slots"][1]["transition"] == "whip_left"
+
+    # 2. Test RenderEngine renders exact timeline of template
+    engine = RenderEngine()
+    with tempfile.TemporaryDirectory() as td:
+        sample_clip = Path(td) / "clip.mp4"
+        subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+            "-i", "testsrc=size=1080x1920:rate=30", "-t", "8.0",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(sample_clip)
+        ], check=True)
+
+        sample_music = Path(td) / "music.wav"
+        subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+            "-i", "sine=frequency=440:beep_factor=2", "-t", "8.0",
+            str(sample_music)
+        ], check=True)
+
+        out_mp4 = Path(td) / "test_tpl_out.mp4"
+        info = engine.render_video(
+            clip_paths=[sample_clip, sample_clip],
+            music_path=sample_music,
+            title="KEYBOARD WIRELESS",
+            subtitle="GAMING ACCESSORY",
+            style_id="tpl_viral_deal_drop",
+            out_path=out_mp4,
+        )
+
+        assert out_mp4.exists()
+        assert out_mp4.stat().st_size > 0
+        assert info["segments"] == 5  # Exactly 5 slots from tpl_viral_deal_drop
+        assert abs(info["duration"] - 6.0) < 0.2  # Exactly 6.0s duration!
+

@@ -27,6 +27,48 @@ DEFAULT_TEMPLATES: List[Dict[str, Any]] = [
         "subtitle_y": 380,
         "target_duration": 6.0,
         "is_custom": False,
+        "slots": [
+            {
+                "slot_index": 0,
+                "duration": 1.2,
+                "transition": "snap_zoom",
+                "motion": "zoom_punch",
+                "crop_mode": "auto",
+                "label": "Hook Opening",
+            },
+            {
+                "slot_index": 1,
+                "duration": 0.8,
+                "transition": "whip_left",
+                "motion": "macro_focus",
+                "crop_mode": "auto",
+                "label": "Beat Drop",
+            },
+            {
+                "slot_index": 2,
+                "duration": 1.4,
+                "transition": "whip_right",
+                "motion": "zoom_punch",
+                "crop_mode": "auto",
+                "label": "Key Feature",
+            },
+            {
+                "slot_index": 3,
+                "duration": 1.1,
+                "transition": "swish_up",
+                "motion": "macro_focus",
+                "crop_mode": "auto",
+                "label": "In-Hand Demo",
+            },
+            {
+                "slot_index": 4,
+                "duration": 1.5,
+                "transition": "dissolve",
+                "motion": "overview",
+                "crop_mode": "auto",
+                "label": "CTA / Outro",
+            },
+        ],
     },
     {
         "id": "tpl_aesthetic_showcase",
@@ -41,8 +83,42 @@ DEFAULT_TEMPLATES: List[Dict[str, Any]] = [
         "subtitle_color": "#FFFFFF",
         "subtitle_font_size": 56,
         "subtitle_y": 390,
-        "target_duration": 6.0,
+        "target_duration": 6.5,
         "is_custom": False,
+        "slots": [
+            {
+                "slot_index": 0,
+                "duration": 1.8,
+                "transition": "dissolve",
+                "motion": "float_drift",
+                "crop_mode": "contain_blur",
+                "label": "Ambient Intro",
+            },
+            {
+                "slot_index": 1,
+                "duration": 1.4,
+                "transition": "dissolve",
+                "motion": "macro_focus",
+                "crop_mode": "contain_blur",
+                "label": "Texture Glide",
+            },
+            {
+                "slot_index": 2,
+                "duration": 1.6,
+                "transition": "dissolve",
+                "motion": "overview",
+                "crop_mode": "contain_blur",
+                "label": "Design Angles",
+            },
+            {
+                "slot_index": 3,
+                "duration": 1.7,
+                "transition": "dissolve",
+                "motion": "float_drift",
+                "crop_mode": "contain_blur",
+                "label": "Aesthetic Close",
+            },
+        ],
     },
     {
         "id": "tpl_promo_pop",
@@ -57,10 +133,60 @@ DEFAULT_TEMPLATES: List[Dict[str, Any]] = [
         "subtitle_color": "#FFD700",
         "subtitle_font_size": 64,
         "subtitle_y": 380,
-        "target_duration": 6.0,
+        "target_duration": 5.6,
         "is_custom": False,
+        "slots": [
+            {
+                "slot_index": 0,
+                "duration": 1.0,
+                "transition": "snap_zoom",
+                "motion": "zoom_punch",
+                "crop_mode": "auto",
+                "label": "Price Alert",
+            },
+            {
+                "slot_index": 1,
+                "duration": 0.9,
+                "transition": "whip_right",
+                "motion": "macro_focus",
+                "crop_mode": "auto",
+                "label": "Flash Detail",
+            },
+            {
+                "slot_index": 2,
+                "duration": 1.2,
+                "transition": "snap_zoom",
+                "motion": "zoom_punch",
+                "crop_mode": "auto",
+                "label": "Discount Value",
+            },
+            {
+                "slot_index": 3,
+                "duration": 1.1,
+                "transition": "whip_left",
+                "motion": "macro_focus",
+                "crop_mode": "auto",
+                "label": "Unbox / Touch",
+            },
+            {
+                "slot_index": 4,
+                "duration": 1.4,
+                "transition": "dissolve",
+                "motion": "overview",
+                "crop_mode": "auto",
+                "label": "Urgent CTA",
+            },
+        ],
     },
 ]
+
+class TimelineSlot(BaseModel):
+    slot_index: int
+    duration: float
+    transition: str = "snap_zoom"  # snap_zoom, whip_left, whip_right, swish_up, dissolve, none
+    motion: str = "zoom_punch"     # zoom_punch, macro_focus, overview, float_drift, slow_zoom, none
+    crop_mode: str = "auto"        # auto, contain_blur, cover
+    label: Optional[str] = ""
 
 class TemplateSpec(BaseModel):
     id: str
@@ -78,12 +204,12 @@ class TemplateSpec(BaseModel):
     target_duration: float = 6.0
     is_custom: bool = False
     is_default: bool = False
+    slots: List[Dict[str, Any]] = []
 
 def get_templates_dir() -> Path:
     for d in TEMPLATES_DIRS:
         if d.exists():
             return d
-    # Create the primary one
     primary = TEMPLATES_DIRS[0]
     primary.mkdir(parents=True, exist_ok=True)
     return primary
@@ -92,7 +218,18 @@ def seed_default_templates_if_needed():
     tdir = get_templates_dir()
     for default_tpl in DEFAULT_TEMPLATES:
         tpl_file = tdir / f"{default_tpl['id']}.json"
+        should_write = False
         if not tpl_file.exists():
+            should_write = True
+        else:
+            try:
+                data = json.loads(tpl_file.read_text(encoding="utf-8"))
+                if "slots" not in data or not data["slots"]:
+                    should_write = True
+            except Exception:
+                should_write = True
+
+        if should_write:
             try:
                 tpl_file.write_text(json.dumps(default_tpl, indent=2), encoding="utf-8")
             except Exception:
@@ -104,7 +241,6 @@ def list_all_templates() -> List[Dict[str, Any]]:
     templates = []
     seen = set()
 
-    # Search all candidate directories
     search_dirs = [tdir]
     for d in TEMPLATES_DIRS:
         if d.exists() and d not in search_dirs:
@@ -117,6 +253,13 @@ def list_all_templates() -> List[Dict[str, Any]]:
                 tid = data.get("id", f.stem)
                 if tid not in seen:
                     seen.add(tid)
+                    # Ensure slots exists
+                    if "slots" not in data or not data["slots"]:
+                        # Match with default template slots if available
+                        for dt in DEFAULT_TEMPLATES:
+                            if dt["id"] == tid:
+                                data["slots"] = dt["slots"]
+                                break
                     templates.append(data)
             except Exception:
                 pass
@@ -137,11 +280,16 @@ def get_template_by_id(template_id: str) -> Optional[Dict[str, Any]]:
     for c in candidates:
         if c.exists():
             try:
-                return json.loads(c.read_text(encoding="utf-8"))
+                data = json.loads(c.read_text(encoding="utf-8"))
+                if ("slots" not in data or not data["slots"]):
+                    for dt in DEFAULT_TEMPLATES:
+                        if dt["id"] == clean_id:
+                            data["slots"] = dt["slots"]
+                            break
+                return data
             except Exception:
                 pass
 
-    # Check defaults fallback
     for dt in DEFAULT_TEMPLATES:
         if dt["id"] == clean_id:
             return dict(dt)
@@ -155,7 +303,21 @@ def save_template_spec(spec_data: Dict[str, Any]) -> Dict[str, Any]:
         tid = f"tpl_{slug}_{os.urandom(2).hex()}"
         spec_data["id"] = tid
 
-    # Save to both data/templates and /app/data/templates if available
+    # Ensure slot indexes and durations are clean
+    if "slots" in spec_data and isinstance(spec_data["slots"], list):
+        for idx, s in enumerate(spec_data["slots"]):
+            s["slot_index"] = idx
+            s["duration"] = round(max(0.3, float(s.get("duration", 1.2))), 2)
+            if "transition" not in s:
+                s["transition"] = "snap_zoom"
+            if "motion" not in s:
+                s["motion"] = "zoom_punch"
+            if "crop_mode" not in s:
+                s["crop_mode"] = spec_data.get("crop_mode", "auto")
+            if "label" not in s:
+                s["label"] = f"Slot #{idx + 1}"
+        spec_data["target_duration"] = round(sum(s["duration"] for s in spec_data["slots"]), 2)
+
     for d in TEMPLATES_DIRS:
         try:
             d.mkdir(parents=True, exist_ok=True)

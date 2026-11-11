@@ -65,6 +65,7 @@ def build_clip_filters(
     text_filter: str = "",
     crop_mode: str = "cover",
     motion_type: str = "none",
+    transition_type: str = "none",
     motion_intensity: float = 1.0,
     fps: int = 30,
     width: int = 1080,
@@ -88,7 +89,6 @@ def build_clip_filters(
     clip_h = clip.get("h") or 1920
     is_horizontal = clip_w > clip_h
 
-    # "auto" intelligently chooses contain_blur for horizontal clips and cover for vertical
     effective_crop = crop_mode
     if crop_mode in ("auto", "smart", "adaptive"):
         effective_crop = "contain_blur" if is_horizontal else "cover"
@@ -115,60 +115,81 @@ def build_clip_filters(
         )
         f.append(f"crop={width}:{height}")
 
-    # 3. Professional Motion & Beat-Synced Transition Effects (Clean & Flash-Free)
+    # 3. Professional Motion & Beat-Synced Transition Effects
     seg_dur = max(0.4, n_frames / fps)
     frames_den = max(1, n_frames)
 
-    if motion_type == "zoom_punch" or style_id in ("punchy_zoom", "punchy"):
-        # TikTok Affiliate Kinetic Pro Cut Cycle (No white flashes - pure professional camera motion):
-        # Cut 0: Scroll-stopping snap punch with ease-out (1.18x -> 1.0x in 7 frames)
-        # Cut 1: Dynamic whip pan left swish (+40px lateral entry) + snap settle
-        # Cut 2: Tactile macro detail push-in (1.02x -> 1.16x forward tracking)
-        # Cut 3: Dynamic whip pan right swish (-40px lateral entry) + snap settle
-        # Cut 4: Cinematic pull-back overview reveal (1.16x -> 1.0x reverse tracking)
+    # Check if explicit transition or motion is provided (Template / Slot-driven mode)
+    has_explicit_transition = bool(transition_type and transition_type != "none")
+    has_explicit_motion = bool(motion_type and motion_type != "none")
+
+    if has_explicit_transition or has_explicit_motion:
+        # Apply explicit transition
+        if transition_type == "snap_zoom":
+            f.append(f"zoompan=z='if(lte(on,7),1.18-0.025*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif transition_type == "whip_left":
+            f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)+(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif transition_type == "whip_right":
+            f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)-(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif transition_type == "swish_up":
+            f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='if(lte(on,6),ih/2-(ih/zoom/2)+(6-on)*9,ih/2-(ih/zoom/2))':s={width}x{height}:fps={fps}")
+        elif transition_type == "dissolve":
+            fade_d = min(0.12, max(0.06, seg_dur * 0.08))
+            fade_out_st = max(0.0, seg_dur - fade_d)
+            f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")
+            # If also have camera drift motion with dissolve, add it
+            if motion_type == "macro_focus":
+                f.append(f"zoompan=z='min(1.16, 1.02 + (0.14/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type == "overview":
+                f.append(f"zoompan=z='max(1.0, 1.16 - (0.16/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type in ("float_drift", "smooth_flow", "smooth_drift"):
+                f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif not has_explicit_transition and has_explicit_motion:
+            # Transition is none (hard cut), apply explicit camera motion
+            if motion_type == "zoom_punch":
+                f.append(f"zoompan=z='if(lte(on,7),1.18-0.025*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type == "macro_focus":
+                f.append(f"zoompan=z='min(1.16, 1.02 + (0.14/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type == "overview":
+                f.append(f"zoompan=z='max(1.0, 1.16 - (0.16/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type in ("float_drift", "smooth_flow", "smooth_drift"):
+                f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            elif motion_type == "slow_zoom":
+                f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+
+        # Clean TikTok vibrant grade + sharp edges
+        f.append("eq=contrast=1.06:saturation=1.12:brightness=0.01,unsharp=3:3:0.6:3:3:0.0")
+
+    elif motion_type == "zoom_punch" or style_id in ("punchy_zoom", "punchy"):
+        # TikTok Affiliate Kinetic Pro Cut Cycle (clean motion, zero white flashes):
         mode_idx = seg_idx % 5
         if mode_idx == 0:
-            # Kinetic beat snap zoom
             f.append(f"zoompan=z='if(lte(on,7),1.18-0.025*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 1:
-            # Dynamic Whip-in Left (seamless swish from right into center)
             f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)+(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 2:
-            # Macro Feature Zoom-In (forward push on buttons, textures, ports)
             f.append(f"zoompan=z='min(1.16, 1.02 + (0.14/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 3:
-            # Dynamic Whip-in Right (seamless swish from left into center)
             f.append(f"zoompan=z='if(lte(on,6),1.10-0.016*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)-(6-on)*7,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         else:
-            # Pull-Back Product Overview Reveal (steady smooth pull-back)
             f.append(f"zoompan=z='max(1.0, 1.16 - (0.16/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 
-        # High-converting TikTok affiliate color grading pop + crisp edge sharpening
         f.append("eq=contrast=1.06:saturation=1.12:brightness=0.01,unsharp=3:3:0.6:3:3:0.0")
 
     elif motion_type in ("smooth_flow", "smooth_drift") or style_id in ("smooth_flow", "smooth"):
-        # TikTok Aesthetic Continuous Luxury Gimbal Drift (Inspired by @enchanted.roseee):
-        # Segment 0: Luxury slow glide zoom in (1.0 -> 1.09)
-        # Segment 1: Motorized continuous gimbal pan left
-        # Segment 2: Cinematic pull-back drift (1.09 -> 1.0)
-        # Segment 3: Motorized continuous gimbal pan right
+        # TikTok Aesthetic Continuous Luxury Gimbal Drift:
         mode_idx = seg_idx % 4
         if mode_idx == 0:
-            f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z='min(1.08, 1.0 + (0.08/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 1:
-            f.append(f"zoompan=z=1.05:d=1:x='iw/2-(iw/zoom/2)-(on/{frames_den})*35':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z=1.08:d=1:x='max(0,min(iw-iw/zoom,iw/2-(iw/zoom/2)-(on/{frames_den})*20))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         elif mode_idx == 2:
-            f.append(f"zoompan=z='max(1.0, 1.09 - (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z='max(1.0, 1.08 - (0.08/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         else:
-            f.append(f"zoompan=z=1.05:d=1:x='iw/2-(iw/zoom/2)+(on/{frames_den})*35':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append(f"zoompan=z=1.08:d=1:x='max(0,min(iw-iw/zoom,iw/2-(iw/zoom/2)+(on/{frames_den})*20))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 
-        # Silky soft dissolved crossfade on each cut (film-like dissolve, zero harshness)
-        fade_d = min(0.12, max(0.06, seg_dur * 0.08))
-        fade_out_st = max(0.0, seg_dur - fade_d)
-        f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")
-
-        # Aesthetic cinematic color grade + subtle luxury vignette
-        f.append("eq=contrast=1.05:saturation=1.08:brightness=0.01,vignette=PI/5")
+        # Aesthetic cinematic color gradepop (clean & zero black dips)
+        f.append("eq=contrast=1.05:saturation=1.08:brightness=0.01")
 
     elif motion_type == "slow_zoom":
         f.append(f"zoompan=z='min(1.09, 1.0 + (0.09/{frames_den})*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
@@ -180,7 +201,7 @@ def build_clip_filters(
     f.extend([
         "setsar=1",
         f"fps={fps}:round=near",
-        "tpad=stop_mode=clone:stop=-1",  # Prevents early finish on short cuts
+        "tpad=stop_mode=clone:stop=-1",
         f"trim=end_frame={n_frames}",
         "setpts=PTS-STARTPTS",
     ])

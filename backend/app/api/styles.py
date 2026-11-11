@@ -56,6 +56,7 @@ class TemplateCreateRequest(BaseModel):
     subtitle_font_size: int = 60
     subtitle_y: int = 380
     target_duration: float = 6.0
+    slots: Optional[List[Dict[str, Any]]] = None
 
 class TemplateUpdateRequest(BaseModel):
     name: Optional[str] = None
@@ -70,6 +71,7 @@ class TemplateUpdateRequest(BaseModel):
     subtitle_font_size: Optional[int] = None
     subtitle_y: Optional[int] = None
     target_duration: Optional[float] = None
+    slots: Optional[List[Dict[str, Any]]] = None
 
 class UpdateStyleRequest(BaseModel):
     name: Optional[str] = None
@@ -126,6 +128,15 @@ async def create_template_endpoint(req: TemplateCreateRequest) -> Dict[str, Any]
     data = req.model_dump()
     data["id"] = tid
     data["is_custom"] = True
+    if not data.get("slots"):
+        data["slots"] = [
+            {"slot_index": 0, "duration": 1.2, "transition": "snap_zoom", "motion": "zoom_punch", "crop_mode": req.crop_mode, "label": "Hook Opening"},
+            {"slot_index": 1, "duration": 0.8, "transition": "whip_left", "motion": "macro_focus", "crop_mode": req.crop_mode, "label": "Beat Drop"},
+            {"slot_index": 2, "duration": 1.4, "transition": "whip_right", "motion": "zoom_punch", "crop_mode": req.crop_mode, "label": "Key Feature"},
+            {"slot_index": 3, "duration": 1.1, "transition": "swish_up", "motion": "macro_focus", "crop_mode": req.crop_mode, "label": "In-Hand Demo"},
+            {"slot_index": 4, "duration": 1.5, "transition": "dissolve", "motion": "overview", "crop_mode": req.crop_mode, "label": "CTA / Outro"},
+        ]
+        data["target_duration"] = 6.0
     saved = save_template_spec(data)
     return {"ok": True, "message": f"Template '{req.name}' created successfully", "template": saved}
 

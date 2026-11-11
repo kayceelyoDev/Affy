@@ -70,6 +70,14 @@ interface TemplateOption {
   fixed_music_track: string;
   base_style_id: string;
   crop_mode: string;
+  slots?: Array<{
+    slot_index: number;
+    duration: number;
+    transition: string;
+    motion: string;
+    crop_mode?: string;
+    label?: string;
+  }>;
 }
 
 interface MusicOption {
@@ -1066,6 +1074,31 @@ export const VideosPage: React.FC = () => {
                     </optgroup>
                   </select>
                 </div>
+
+                {/* CapCut Timeline Blueprint Preview if template is active */}
+                {selectedTemplate && selectedTemplate.slots && selectedTemplate.slots.length > 0 && (
+                  <div className="p-3 bg-neutral-950 rounded-lg border border-neutral-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 flex items-center gap-1">
+                        <Film className="w-3 h-3" />
+                        CapCut Timeline Blueprint ({selectedTemplate.slots.length} Slots • {selectedTemplate.slots.reduce((a, b) => a + b.duration, 0).toFixed(1)}s)
+                      </span>
+                      <span className="text-[10px] text-neutral-400">Locked timeline cuts</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                      {selectedTemplate.slots.map((s, idx) => (
+                        <div key={idx} className="shrink-0 px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-center">
+                          <div className="text-[10px] font-bold text-neutral-200">Slot #{idx + 1}</div>
+                          <div className="text-[9px] text-amber-400 font-mono font-semibold">{s.duration}s</div>
+                          <div className="text-[8px] text-neutral-400 truncate max-w-[80px]">{s.transition.replace('_', ' ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-neutral-500">
+                      Product clips are automatically mapped into these slots. Timings, transitions, and motions remain strictly preserved.
+                    </p>
+                  </div>
+                )}
 
                 {/* Music Track Selection */}
                 <div className="space-y-1.5">
