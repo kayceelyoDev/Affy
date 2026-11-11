@@ -1,0 +1,85 @@
+{
+  "id": "promo_pop",
+  "name": "Promo Pop",
+  "version": "1.0",
+  "description": "Engaging promotion layout with top product banner, animated call-to-action badge, progress bar, and pill background captions.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast",
+    "pixel_format": "yuv420p"
+  },
+  "clip_rules": {
+    "min_count": 2,
+    "max_count": 12,
+    "target_seg": 2.2,
+    "min_duration": 10.0,
+    "max_duration": 28.0,
+    "crop_mode": "cover"
+  },
+  "cut_logic": {
+    "mode": "beat_synced",
+    "fixed_duration": 2.2,
+    "beats_per_cut": null
+  },
+  "transitions": {
+    "enabled": true,
+    "transitions": [
+      { "type": "slideleft", "duration": 0.25, "weight": 2.0 },
+      { "type": "fade", "duration": 0.25, "weight": 1.0 }
+    ]
+  },
+  "text_layers": [
+    {
+      "name": "title",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "0xEFD34C",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 250,
+      "max_size": 115,
+      "width_ratio": 0.78,
+      "box": false,
+      "animation": "none"
+    },
+    {
+      "name": "subtitle",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 380,
+      "max_size": 115,
+      "width_ratio": 0.78,
+      "box": false,
+      "animation": "none"
+    },
+    {
+      "name": "cta",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "0xEFD34C",
+      "stroke_width": 1,
+      "position_y": 1620,
+      "max_size": 65,
+      "width_ratio": 0.85,
+      "box": true,
+      "box_color": "0xEF4444@0.9",
+      "box_border_w": 10,
+      "animation": "none"
+    }
+  ],
+  "graphics": [],
+  "motion": {
+    "type": "none",
+    "intensity": 1.0
+  },
+  "audio": {
+    "target_lufs": -14.0,
+    "fade_out_sec": 1.2,
+    "ducking": false,
+    "normalize": true
+  }
+}

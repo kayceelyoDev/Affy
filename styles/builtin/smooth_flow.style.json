@@ -60,8 +60,8 @@
   ],
   "graphics": [],
   "motion": {
-    "type": "none",
-    "intensity": 1.0
+    "type": "smooth_flow",
+    "intensity": 1.06
   },
   "audio": {
     "target_lufs": -14.0,

@@ -1,0 +1,73 @@
+{
+  "id": "clean_showcase",
+  "name": "Clean Showcase",
+  "version": "1.0",
+  "description": "Blurred-background fill for non-vertical clips, elegant slow zoom, title card for the first 1.5s, lower-third captions, and soft fades.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast",
+    "pixel_format": "yuv420p"
+  },
+  "clip_rules": {
+    "min_count": 2,
+    "max_count": 8,
+    "target_seg": 3.0,
+    "min_duration": 10.0,
+    "max_duration": 28.0,
+    "crop_mode": "contain_blur"
+  },
+  "cut_logic": {
+    "mode": "beat_synced",
+    "fixed_duration": 3.0,
+    "beats_per_cut": null
+  },
+  "transitions": {
+    "enabled": true,
+    "transitions": [
+      { "type": "fade", "duration": 0.40, "weight": 2.0 },
+      { "type": "dissolve", "duration": 0.40, "weight": 2.0 }
+    ]
+  },
+  "text_layers": [
+    {
+      "name": "title",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.7",
+      "stroke_width": 2,
+      "position_y": 280,
+      "max_size": 105,
+      "width_ratio": 0.75,
+      "box": false,
+      "animation": "fade_out_2s"
+    },
+    {
+      "name": "clip_caption",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 1580,
+      "max_size": 70,
+      "width_ratio": 0.85,
+      "box": true,
+      "box_color": "black@0.5",
+      "box_border_w": 8,
+      "animation": "none"
+    }
+  ],
+  "graphics": [],
+  "motion": {
+    "type": "slow_zoom",
+    "intensity": 1.05
+  },
+  "audio": {
+    "target_lufs": -14.5,
+    "fade_out_sec": 1.5,
+    "ducking": false,
+    "normalize": true
+  }
+}

@@ -91,12 +91,19 @@ def build_clip_filters(
         f.append(f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=bicubic:out_range=tv:out_color_matrix=bt709")
         f.append(f"crop={width}:{height}")
 
-    # 3. Motion effects (slow zoom / zoom punch)
+    # 3. Motion effects (slow zoom / zoom punch / smooth drift)
     if motion_type == "zoom_punch":
-        # Zoom in by intensity and slowly ease
-        f.append(f"scale=trunc(iw*{motion_intensity}/2)*2:trunc(ih*{motion_intensity}/2)*2,crop={width}:{height}")
+        # Dynamic zoom punch: burst to 1.18x on beat hit and ease back to 1.0x over first 12 frames (~0.4s)
+        f.append(f"zoompan=z='if(lte(on,12),1.18-0.015*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+    elif motion_type in ("smooth_flow", "smooth_drift"):
+        # Smooth Ken Burns slow cinematic drift + gentle soft dissolves
+        seg_dur = max(0.5, n_frames / fps)
+        fade_d = min(0.25, max(0.08, seg_dur * 0.15))
+        fade_out_st = max(0.0, seg_dur - fade_d)
+        f.append(f"zoompan=z='min(zoom+0.0008,1.08)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")
     elif motion_type == "slow_zoom":
-        f.append(f"zoompan=z='min(zoom+0.0015,1.1)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        f.append(f"zoompan=z='min(zoom+0.0012,1.12)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 
     # 4. Deterministic Frame Timing & Padding Glitch Defense
     f.extend([

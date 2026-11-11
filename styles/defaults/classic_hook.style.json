@@ -1,0 +1,74 @@
+{
+  "id": "classic_hook",
+  "name": "Classic Hook",
+  "version": "1.0",
+  "description": "Original high-conversion TikTok affiliate style: Anton bold font, warm yellow hook, white subtitle, beat-synced hard cuts without effects.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast",
+    "pixel_format": "yuv420p"
+  },
+  "clip_rules": {
+    "min_count": 2,
+    "max_count": 12,
+    "target_seg": 2.2,
+    "min_duration": 10.0,
+    "max_duration": 28.0,
+    "crop_mode": "cover"
+  },
+  "cut_logic": {
+    "mode": "beat_synced",
+    "fixed_duration": 2.2,
+    "beats_per_cut": null
+  },
+  "transitions": {
+    "enabled": false,
+    "transitions": [
+      {
+        "type": "none",
+        "duration": 0.0,
+        "weight": 1.0
+      }
+    ]
+  },
+  "text_layers": [
+    {
+      "name": "title",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "0xEFD34C",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 230,
+      "max_size": 125,
+      "width_ratio": 0.78,
+      "box": false,
+      "animation": "none"
+    },
+    {
+      "name": "subtitle",
+      "font_file": "fonts/Anton-Regular.ttf",
+      "color": "white",
+      "stroke_color": "black@0.9",
+      "stroke_width": 2,
+      "position_y": 360,
+      "max_size": 125,
+      "width_ratio": 0.78,
+      "box": false,
+      "animation": "none"
+    }
+  ],
+  "graphics": [],
+  "motion": {
+    "type": "none",
+    "intensity": 1.0
+  },
+  "audio": {
+    "target_lufs": -14.0,
+    "fade_out_sec": 1.2,
+    "ducking": false,
+    "normalize": true
+  }
+}

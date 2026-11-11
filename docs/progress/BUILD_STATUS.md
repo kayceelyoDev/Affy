@@ -27,10 +27,38 @@
 | **Folder=Prod**| Google Drive Subfolders as Products, Clip Library UI & Complete Clean Slate | R05, R17, UI Parity | **DONE** | **PASSED** (commit `c306d8c`) |
 | **Styles** | Flexible Video Style Selection: Per-Video, Default & Random Diverse Modes | R12, R13, R14, R15, R16 | **DONE** | **PASSED** (commit `a02b787`) |
 | **Studio** | Style Studio Live Product Preview, One-Click Default & Complete Emoji Elimination | R12-R16, UI Cleanliness | **DONE** | **PASSED** (Verified live with Punchy Zoom render) |
+| **Studio 2**| Interactive Style Editor: Drag Text, Color/Size Customizer, Music Selector, Custom Styles & Fixed Punchy/Smooth Engines | R12-R16, Real-Time Interactivity | **DONE** | **PASSED** (Live verified with FFmpeg beat cuts) |
 
 ---
 
-## 2. Style Studio Live Product Preview, One-Click Default Style & Complete Emoji Elimination
+## 2. Interactive Style Studio: Visual Drag-to-Position, Color/Size Customizer, Music Selection & Fixed Motion Engines
+
+1. **Active In-Canvas Render Loading Status:**
+   - Displayed an animated, high-tech loading screen directly inside the 9:16 mobile mockup during FFmpeg preview generation.
+   - Features a pulsing radar spinner, animated gradient progress bar, and real-time status messaging ("Analyzing beats, cutting footage & burning typography...").
+
+2. **Selectable Background Music Tracks:**
+   - Added a Music Track selector dropdown with 15 real tracks from `/data/music/` (e.g. `Affiliate Track (1)`, `Viral Beat V2 (2)`, or `Random Beat Rotation`).
+   - Integrated into `POST /api/styles/preview` and `GET /api/styles/music-tracks`, beat-aligning audio dynamically with video cuts.
+
+3. **Motion Engines Fixed for `Punchy Zoom` & `Smooth Flow`:**
+   - **Punchy Zoom**: Replaced static crop with a dynamic 1.18x zoom punch (`zoompan=z='if(lte(on,12),1.18-0.015*on,1.0)...'`) that hits hard on every beat cut and eases back smoothly.
+   - **Smooth Flow**: Implemented gentle Ken Burns slow drift (`zoompan=z='min(zoom+0.0008,1.08)...'`) paired with soft dissolves and cross-fades (`fade=t=in... fade=t=out...`).
+   - Both styles verified producing real 1080x1920 MP4 video previews in under 5 seconds.
+
+4. **Visual Drag-to-Position & Live Typography Editor:**
+   - **Interactive Canvas Drag**: Creators can directly click and drag text layers (Title, Subhook/Caption) up and down on the phone mockup, updating vertical coordinates (`Y: 240px`) in real-time.
+   - **Color & Size Customizer**: Added color swatches (TikTok Yellow `#EFD34C`, Pure White, Punchy Red, Cyber Cyan, Neon Green, Orange Pop) plus native color picker and font size sliders (40px - 160px).
+   - **Instant Visual Feedback**: Mockup text updates live as the creator drags or tweaks colors/sizes.
+
+5. **Style Persistence & Custom Style Creation:**
+   - **"Save Changes" Button**: Saves customized colors, sizes, and Y-positions via `PUT /api/styles/{style_id}`. Once saved, all future automated renders use the creator's exact visual preferences.
+   - **"Reset to Default" Button**: Restores original built-in templates from `styles/defaults/`.
+   - **"+ New Custom Style" Modal**: Allows creators to duplicate or create brand new custom styles (e.g. "Neon Yellow Punch"), save them to the library, and use them across all daily plans and batch edits.
+
+---
+
+## 3. Style Studio Live Product Preview, One-Click Default Style & Complete Emoji Elimination
 
 1. **Style Studio (`/styles`) End-to-End Real-Time Previews:**
    - **Product Selector Dropdown**: Automatically fetches real synced products (`ATTACK SHARK X11`, `20000MAH POWERBANK`, etc.) with clip counts.
