@@ -273,7 +273,18 @@ class RenderEngine:
                     # Strict CapCut template timeline: cuts, durations, motions & transitions are strictly locked
                     template_slots = tpl["slots"]
                     durations = [max(0.3, float(s.get("duration", 1.2))) for s in template_slots]
-                    used_clips = [clips[i % len(clips)] for i in range(len(durations))]
+                    used_clips = []
+                    for i, s in enumerate(template_slots):
+                        assigned_path = s.get("clip_path")
+                        matched_clip = None
+                        if assigned_path:
+                            for c in clips:
+                                if assigned_path in str(c.path) or Path(assigned_path).name == Path(c.path).name:
+                                    matched_clip = c
+                                    break
+                        if not matched_clip:
+                            matched_clip = clips[i % len(clips)]
+                        used_clips.append(matched_clip)
                     t0 = 0.0
                     bpc = 1
                     fps = spec.canvas.fps

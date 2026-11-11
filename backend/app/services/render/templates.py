@@ -187,6 +187,9 @@ class TimelineSlot(BaseModel):
     motion: str = "zoom_punch"     # zoom_punch, macro_focus, overview, float_drift, slow_zoom, none
     crop_mode: str = "auto"        # auto, contain_blur, cover
     label: Optional[str] = ""
+    clip_id: Optional[int] = None
+    clip_path: Optional[str] = None
+    clip_filename: Optional[str] = None
 
 class TemplateSpec(BaseModel):
     id: str

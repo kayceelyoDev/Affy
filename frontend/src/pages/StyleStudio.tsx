@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button, Card, Input, Badge } from '../components/ui';
 import {
   Play,
+  Pause,
   Sliders,
-  Video,
   Check,
   AlertCircle,
   CheckCircle2,
@@ -24,8 +24,26 @@ import {
   ArrowUp,
   Scissors,
   Copy,
+  Volume2,
+  VolumeX,
+  Upload,
+  Eye,
+  Download,
 } from 'lucide-react';
 import { api } from '../api/client';
+
+export interface ClipItem {
+  id: number;
+  product_id: number;
+  filename: string;
+  file_path: string;
+  duration: number;
+  resolution?: string;
+  fps?: number;
+  codec?: string;
+  status?: string;
+  tags?: string;
+}
 
 interface TextLayerConfig {
   name: string;
@@ -73,6 +91,9 @@ export interface TimelineSlotData {
   motion: 'zoom_punch' | 'macro_focus' | 'overview' | 'float_drift' | 'slow_zoom' | 'none';
   crop_mode: 'auto' | 'contain_blur' | 'cover';
   label?: string;
+  clip_id?: number;
+  clip_path?: string;
+  clip_filename?: string;
 }
 
 export interface TemplateData {
@@ -171,6 +192,21 @@ export const StyleStudioPage: React.FC = () => {
   const [subtitleText, setSubtitleText] = useState('VIRAL WIRELESS GAMING MOUSE');
   const [actionAlert, setActionAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Product clips & Real-time Playback State
+  const [productClips, setProductClips] = useState<ClipItem[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'realtime' | 'rendered'>('realtime');
+  const [showClipPickerModal, setShowClipPickerModal] = useState(false);
+  const [clipPickerSlotIndex, setClipPickerSlotIndex] = useState<number | null>(null);
+  const [uploadingClip, setUploadingClip] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const timelineTrackRef = useRef<HTMLDivElement>(null);
+  const clipFileInputRef = useRef<HTMLInputElement>(null);
+
   // Phone Canvas Dragging State
   const phoneCanvasRef = useRef<HTMLDivElement>(null);
   const [draggingLayer, setDraggingLayer] = useState<string | null>(null);
@@ -218,11 +254,21 @@ export const StyleStudioPage: React.FC = () => {
         setProducts(prods);
         const defaultProd = prods.find((p) => (p.clip_count || 0) > 0) || prods[0];
         setSelectedProductId(defaultProd.id);
+        fetchProductClips(defaultProd.id);
         setTitleText(defaultProd.name.split('-')[0].trim());
         setSubtitleText('VIRAL MUST-HAVE DEAL');
       }
     } catch (err) {
       console.error('Failed to load products', err);
+    }
+  };
+
+  const fetchProductClips = async (prodId: number) => {
+    try {
+      const clips = await api.get<ClipItem[]>(`/api/catalog/products/${prodId}/clips`);
+      setProductClips(clips || []);
+    } catch (err) {
+      console.error('Failed to load product clips', err);
     }
   };
 
@@ -242,6 +288,7 @@ export const StyleStudioPage: React.FC = () => {
 
   const handleProductSelect = (prodId: number) => {
     setSelectedProductId(prodId);
+    fetchProductClips(prodId);
     const prod = products.find((p) => p.id === prodId);
     if (prod) {
       const cleanTitle = prod.name.length > 28 ? prod.name.split('-')[0].trim() : prod.name;
@@ -279,6 +326,319 @@ export const StyleStudioPage: React.FC = () => {
       return '0x' + hex.slice(1).toUpperCase();
     }
     return hex;
+  };
+
+  // ------------------ REAL-TIME PLAYBACK & TIMELINE CALCULATIONS ------------------
+  const currentTemplateSlots = selectedTemplate?.slots || [];
+
+  const slotRanges = useMemo(() => {
+    let accumulated = 0;
+    return currentTemplateSlots.map((slot, index) => {
+      const start = accumulated;
+      const end = accumulated + slot.duration;
+      accumulated = end;
+      // Resolve clip path: explicitly assigned or modulo default from productClips
+      const fallbackClip = productClips.length > 0 ? productClips[index % productClips.length] : null;
+      const assignedPath = slot.clip_path || (fallbackClip ? fallbackClip.file_path : '');
+      const assignedFilename = slot.clip_filename || (fallbackClip ? fallbackClip.filename : `Clip #${index + 1}`);
+      return {
+        index,
+        start,
+        end,
+        duration: slot.duration,
+        slot,
+        clipPath: assignedPath,
+        clipFilename: assignedFilename,
+      };
+    });
+  }, [currentTemplateSlots, productClips]);
+
+  const currentTotalDuration = useMemo(() => {
+    if (slotRanges.length === 0) return selectedTemplate?.target_duration || 6.0;
+    return Math.round(slotRanges[slotRanges.length - 1].end * 10) / 10;
+  }, [slotRanges, selectedTemplate]);
+
+  // Active slot based on currentTime
+  const activeSlotRange = useMemo(() => {
+    if (slotRanges.length === 0) return null;
+    const found = slotRanges.find((r) => currentTime >= r.start && currentTime < r.end);
+    return found || slotRanges[slotRanges.length - 1];
+  }, [slotRanges, currentTime]);
+
+  const activeSlotLocalTime = activeSlotRange ? Math.max(0, currentTime - activeSlotRange.start) : 0;
+  const isEnteringSlot = activeSlotLocalTime < 0.35;
+
+  // Video source sync
+  useEffect(() => {
+    if (!videoRef.current || !activeSlotRange?.clipPath) return;
+    const targetSrc = `/api/storage/preview/${encodeURIComponent(activeSlotRange.clipPath)}`;
+    const currentVideoSrc = videoRef.current.getAttribute('data-src');
+
+    if (currentVideoSrc !== targetSrc) {
+      videoRef.current.setAttribute('data-src', targetSrc);
+      videoRef.current.src = targetSrc;
+      videoRef.current.currentTime = activeSlotLocalTime;
+      if (isPlaying) {
+        videoRef.current.play().catch(() => {});
+      }
+    } else {
+      if (Math.abs(videoRef.current.currentTime - activeSlotLocalTime) > 0.35) {
+        videoRef.current.currentTime = activeSlotLocalTime;
+      }
+    }
+  }, [activeSlotRange?.clipPath, Math.floor(activeSlotLocalTime * 2)]);
+
+  // Animation frame loop for real-time playhead progression
+  useEffect(() => {
+    if (!isPlaying) {
+      if (videoRef.current) videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
+      return;
+    }
+
+    let animationId: number;
+    let lastTime = performance.now();
+
+    const loop = (now: number) => {
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      setCurrentTime((prev) => {
+        const next = prev + delta;
+        if (next >= currentTotalDuration) {
+          // Loop back seamlessly to start
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            videoRef.current.play().catch(() => {});
+          }
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            if (!isMuted) audioRef.current.play().catch(() => {});
+          }
+          return 0;
+        }
+        return next;
+      });
+
+      animationId = requestAnimationFrame(loop);
+    };
+
+    if (videoRef.current && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    }
+    if (audioRef.current && !isMuted) {
+      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.3) {
+        audioRef.current.currentTime = currentTime;
+      }
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+    }
+
+    animationId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animationId);
+  }, [isPlaying, currentTotalDuration, isMuted]);
+
+  // Audio track update
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (selectedTemplate?.fixed_music_track) {
+      audioRef.current.src = `/api/styles/music-stream/${encodeURIComponent(selectedTemplate.fixed_music_track)}`;
+      audioRef.current.currentTime = currentTime;
+      if (isPlaying && !isMuted) {
+        audioRef.current.play().catch(() => {});
+      }
+    }
+  }, [selectedTemplate?.fixed_music_track]);
+
+  // Spacebar play/pause shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        return;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleSeek = (newTime: number) => {
+    const clamped = Math.max(0, Math.min(newTime, currentTotalDuration));
+    setCurrentTime(clamped);
+    if (audioRef.current) {
+      audioRef.current.currentTime = clamped;
+    }
+    const targetRange = slotRanges.find((r) => clamped >= r.start && clamped < r.end) || slotRanges[slotRanges.length - 1];
+    if (targetRange) {
+      setSelectedSlotIndex(targetRange.index);
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.max(0, clamped - targetRange.start);
+      }
+    }
+  };
+
+  const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!timelineTrackRef.current) return;
+    const rect = timelineTrackRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    handleSeek(ratio * currentTotalDuration);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const moveX = moveEvent.clientX - rect.left;
+      const moveRatio = Math.max(0, Math.min(1, moveX / rect.width));
+      handleSeek(moveRatio * currentTotalDuration);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleSplitSlotAtPlayhead = () => {
+    if (!selectedTemplate || !selectedTemplate.slots || !activeSlotRange) return;
+    const splitOffset = currentTime - activeSlotRange.start;
+    const remaining = activeSlotRange.duration - splitOffset;
+
+    if (splitOffset < 0.25 || remaining < 0.25) {
+      setActionAlert({
+        type: 'error',
+        message: 'Cannot cut: playhead must be at least 0.3s from clip edges.',
+      });
+      return;
+    }
+
+    const currentSlots = selectedTemplate.slots;
+    const targetSlot = currentSlots[activeSlotRange.index];
+    const dur1 = Math.round(splitOffset * 10) / 10;
+    const dur2 = Math.round(remaining * 10) / 10;
+
+    const slot1: TimelineSlotData = {
+      ...targetSlot,
+      duration: dur1,
+      label: targetSlot.label ? `${targetSlot.label} A` : `Cut ${activeSlotRange.index + 1}A`,
+    };
+    const slot2: TimelineSlotData = {
+      ...targetSlot,
+      slot_index: activeSlotRange.index + 1,
+      duration: dur2,
+      label: targetSlot.label ? `${targetSlot.label} B` : `Cut ${activeSlotRange.index + 1}B`,
+    };
+
+    const newSlots = [
+      ...currentSlots.slice(0, activeSlotRange.index),
+      slot1,
+      slot2,
+      ...currentSlots.slice(activeSlotRange.index + 1),
+    ].map((s, i) => ({ ...s, slot_index: i }));
+
+    const totalDur = newSlots.reduce((acc, curr) => acc + curr.duration, 0);
+    const updatedTpl = {
+      ...selectedTemplate,
+      slots: newSlots,
+      target_duration: Math.round(totalDur * 10) / 10,
+    };
+
+    setSelectedTemplate(updatedTpl);
+    setTemplates((prev) => prev.map((t) => (t.id === updatedTpl.id ? updatedTpl : t)));
+    setHasUnsavedChanges(true);
+    setSelectedSlotIndex(activeSlotRange.index + 1);
+    setActionAlert({
+      type: 'success',
+      message: `Cut clip at ${currentTime.toFixed(1)}s into ${dur1}s and ${dur2}s cuts!`,
+    });
+  };
+
+  const handleAssignClip = (slotIdx: number, clip: ClipItem) => {
+    handleUpdateSlot(slotIdx, {
+      clip_id: clip.id,
+      clip_path: clip.file_path,
+      clip_filename: clip.filename,
+      label: clip.filename.replace(/\.[^/.]+$/, ''),
+    });
+    setShowClipPickerModal(false);
+    setActionAlert({
+      type: 'success',
+      message: `Assigned "${clip.filename}" to Slot #${slotIdx + 1}!`,
+    });
+  };
+
+  const handleUploadClip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProductId) return;
+    setUploadingClip(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/api/catalog/products/${selectedProductId}/clips/upload`, formData);
+      await fetchProductClips(selectedProductId);
+      setActionAlert({ type: 'success', message: `Uploaded "${file.name}" to product clips!` });
+    } catch (err: any) {
+      setActionAlert({ type: 'error', message: 'Upload failed: ' + (err.message || 'Unknown error') });
+    } finally {
+      setUploadingClip(false);
+      if (clipFileInputRef.current) clipFileInputRef.current.value = '';
+    }
+  };
+
+  const getSlotMotionStyle = () => {
+    if (!activeSlotRange) return {};
+    const motion = activeSlotRange.slot.motion;
+    const dur = activeSlotRange.duration || 1.0;
+    const progress = Math.min(1, activeSlotLocalTime / dur);
+
+    let baseTransform = '';
+    if (motion === 'zoom_punch') {
+      const scale = 1.05 + progress * 0.1;
+      baseTransform = `scale(${scale})`;
+    } else if (motion === 'macro_focus') {
+      baseTransform = 'scale(1.18)';
+    } else if (motion === 'float_drift') {
+      const x = Math.sin(progress * Math.PI) * 2;
+      const y = Math.cos(progress * Math.PI) * 1.5;
+      baseTransform = `translate(${x}%, ${y}%) scale(1.05)`;
+    } else if (motion === 'slow_zoom') {
+      const scale = 1.0 + progress * 0.08;
+      baseTransform = `scale(${scale})`;
+    } else {
+      baseTransform = 'scale(1.0)';
+    }
+
+    let transitionTransform = '';
+    let opacity = 1.0;
+    if (isEnteringSlot) {
+      const tProgress = activeSlotLocalTime / 0.35;
+      const t = activeSlotRange.slot.transition;
+      if (t === 'snap_zoom') {
+        const s = 1.25 - tProgress * 0.25;
+        transitionTransform = `scale(${s})`;
+      } else if (t === 'whip_left') {
+        const tx = (1 - tProgress) * 35;
+        transitionTransform = `translateX(${tx}%)`;
+      } else if (t === 'whip_right') {
+        const tx = (1 - tProgress) * -35;
+        transitionTransform = `translateX(${tx}%)`;
+      } else if (t === 'swish_up') {
+        const ty = (1 - tProgress) * 35;
+        transitionTransform = `translateY(${ty}%)`;
+      } else if (t === 'dissolve') {
+        opacity = 0.2 + tProgress * 0.8;
+      }
+    }
+
+    return {
+      transform: transitionTransform || baseTransform,
+      opacity,
+      transition: isEnteringSlot ? 'none' : 'transform 0.1s linear',
+    };
   };
 
   // ------------------ TEMPLATE TIMELINE SLOT ACTIONS ------------------
@@ -744,9 +1104,7 @@ export const StyleStudioPage: React.FC = () => {
       ? selectedTemplate?.crop_mode || 'auto'
       : selectedStyle?.crop_mode || 'cover';
 
-  const currentTemplateSlots = selectedTemplate?.slots || [];
   const currentSelectedSlot = currentTemplateSlots[selectedSlotIndex] || currentTemplateSlots[0] || null;
-  const currentTotalDuration = selectedTemplate?.target_duration || currentTemplateSlots.reduce((a, b) => a + b.duration, 0);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
@@ -980,8 +1338,8 @@ export const StyleStudioPage: React.FC = () => {
       {/* ===================== CAPCUT MULTI-TRACK TIMELINE EDITOR (FOR TEMPLATES) ===================== */}
       {studioMode === 'templates' && selectedTemplate && (
         <Card className="p-6 bg-white dark:bg-neutral-950 border hairline-border space-y-6">
-          {/* Timeline Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-200 dark:border-neutral-800">
+          {/* Timeline Header & Transport Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-neutral-200 dark:border-neutral-800">
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
@@ -991,13 +1349,49 @@ export const StyleStudioPage: React.FC = () => {
                 <span className="text-xs font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-2 py-0.5 rounded">
                   {currentTemplateSlots.length} Slots • {currentTotalDuration.toFixed(1)}s Total
                 </span>
+                <span className="text-xs font-mono bg-amber-400/20 text-amber-400 border border-amber-400/30 px-2 py-0.5 rounded font-bold">
+                  Playhead: {currentTime.toFixed(1)}s
+                </span>
               </div>
               <p className="text-xs text-neutral-500 mt-1">
-                Edit slot durations, cut transitions, and camera motion effects. When new clips are assigned, the cuts stay strictly on this timeline.
+                Real-time CapCut editor: scrub playhead, split cuts, swap clip footage, and customize transitions live.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* CapCut Quick Actions Toolbar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                title="Play / Pause Timeline (Spacebar)"
+              >
+                {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                {isPlaying ? 'Pause' : 'Play Live'}
+              </button>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleSplitSlotAtPlayhead}
+                className="text-xs gap-1 font-semibold text-amber-400 hover:text-amber-300"
+                title="Split current clip at playhead position into two cuts"
+              >
+                <Scissors className="w-3.5 h-3.5" /> Split Clip
+              </Button>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setClipPickerSlotIndex(selectedSlotIndex);
+                  setShowClipPickerModal(true);
+                }}
+                className="text-xs gap-1 font-semibold text-cyan-400 hover:text-cyan-300"
+                title="Select or upload footage for this slot"
+              >
+                <Folder className="w-3.5 h-3.5" /> Swap Footage
+              </Button>
+
               <Button
                 size="sm"
                 variant="secondary"
@@ -1007,6 +1401,7 @@ export const StyleStudioPage: React.FC = () => {
               >
                 <Plus className="w-3.5 h-3.5" /> Add Slot
               </Button>
+
               <Button
                 size="sm"
                 variant="secondary"
@@ -1017,21 +1412,50 @@ export const StyleStudioPage: React.FC = () => {
               >
                 <Copy className="w-3.5 h-3.5" /> Duplicate
               </Button>
+
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={currentTemplateSlots.length <= 2}
                 onClick={() => handleDeleteSlot(selectedSlotIndex)}
-                className="text-xs gap-1 text-red-500 hover:text-red-600"
+                className="text-xs gap-1 text-red-500 hover:text-red-600 disabled:opacity-40"
                 title="Delete currently selected slot (min 2)"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </Button>
+
+              <button
+                onClick={() => setIsMuted(!isMuted)}
+                className={`p-1.5 rounded-lg border text-xs flex items-center transition-all ${
+                  isMuted
+                    ? 'border-red-500/40 bg-red-500/10 text-red-400'
+                    : 'border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+                title={isMuted ? 'Unmute Audio Preview' : 'Mute Audio Preview'}
+              >
+                {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 
-          {/* Visual Multi-Track Canvas */}
-          <div className="space-y-2 bg-neutral-900 rounded-xl p-4 border border-neutral-800 text-neutral-100 overflow-x-auto shadow-inner">
+          {/* Visual Multi-Track Canvas with Scrubbing Playhead */}
+          <div
+            ref={timelineTrackRef}
+            onMouseDown={handleTimelineMouseDown}
+            className="space-y-2 bg-neutral-900 rounded-xl p-4 border border-neutral-800 text-neutral-100 overflow-x-auto shadow-inner relative select-none cursor-pointer"
+          >
+            {/* Interactive Scrubbing Playhead Needle */}
+            <div
+              style={{
+                left: `calc(96px + ${(currentTime / Math.max(0.1, currentTotalDuration)) * 100}% * (1 - 96px / 100%))`,
+              }}
+              className="absolute top-0 bottom-0 w-0.5 bg-amber-400 z-30 pointer-events-none transition-[left] duration-75"
+            >
+              <div className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-amber-400 rotate-45 rounded-sm shadow-md flex items-center justify-center">
+                <div className="w-1.5 h-1.5 bg-black rounded-full" />
+              </div>
+            </div>
+
             {/* Time Ruler Track */}
             <div className="flex items-center text-[10px] font-mono text-neutral-400 pl-24 pb-1 border-b border-neutral-800">
               {Array.from({ length: Math.ceil(currentTotalDuration) + 1 }).map((_, sec) => (
@@ -1073,14 +1497,18 @@ export const StyleStudioPage: React.FC = () => {
               <div className="flex-1 flex items-center gap-1.5 overflow-x-auto py-1">
                 {currentTemplateSlots.map((slot, idx) => {
                   const isSelected = selectedSlotIndex === idx;
-                  const flexWidth = Math.max(120, slot.duration * 130);
+                  const flexWidth = Math.max(130, slot.duration * 135);
                   const transObj = TRANSITION_OPTIONS.find((t) => t.id === slot.transition);
                   const IconComponent = transObj?.icon || Zap;
 
                   return (
                     <div
                       key={idx}
-                      onClick={() => setSelectedSlotIndex(idx)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSlotIndex(idx);
+                        handleSeek(slotRanges[idx]?.start || 0);
+                      }}
                       style={{ width: `${flexWidth}px` }}
                       className={`h-24 rounded-lg p-2.5 transition-all cursor-pointer flex flex-col justify-between shrink-0 select-none relative ${
                         isSelected
@@ -1097,7 +1525,26 @@ export const StyleStudioPage: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="space-y-1">
+                      {/* Footage Name & Swap Button */}
+                      <div className="flex items-center justify-between text-[9px] text-neutral-400 bg-black/40 px-1.5 py-0.5 rounded truncate">
+                        <div className="flex items-center gap-1 truncate">
+                          <Film className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span className="truncate">{slotRanges[idx]?.clipFilename || `Clip #${idx + 1}`}</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setClipPickerSlotIndex(idx);
+                            setShowClipPickerModal(true);
+                          }}
+                          className="text-amber-400 hover:text-white p-0.5 rounded hover:bg-white/10 shrink-0"
+                          title="Change footage for this slot"
+                        >
+                          <Folder className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1">
                         <div className="flex items-center gap-1 text-[10px] text-neutral-300 truncate">
                           <IconComponent className="w-3 h-3 text-amber-400 shrink-0" />
                           <span className="truncate">{transObj?.label || slot.transition}</span>
@@ -1643,67 +2090,125 @@ export const StyleStudioPage: React.FC = () => {
         {/* Right Column (5 cols): Interactive 9:16 Mobile Phone Canvas */}
         <div className="lg:col-span-5 space-y-4">
           <Card className="p-6 bg-white dark:bg-neutral-950 border hairline-border flex flex-col items-center">
+            {/* Header with Preview Mode Switcher & Render Button */}
             <div className="w-full flex items-center justify-between mb-4">
-              <span className="text-xs uppercase tracking-wider text-neutral-500 font-bold">
-                9:16 Live Canvas Preview
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-wider text-neutral-500 font-bold flex items-center gap-1">
+                  <Film className="w-3.5 h-3.5 text-amber-500" />
+                  {previewMode === 'realtime' ? 'Live CapCut Canvas' : 'Exported MP4'}
+                </span>
+                {previewUrl && (
+                  <div className="flex items-center bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-0.5 text-[10px]">
+                    <button
+                      onClick={() => setPreviewMode('realtime')}
+                      className={`px-2 py-0.5 rounded font-semibold transition-all ${
+                        previewMode === 'realtime'
+                          ? 'bg-amber-400 text-black shadow-sm'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      Live Real-Time
+                    </button>
+                    <button
+                      onClick={() => setPreviewMode('rendered')}
+                      className={`px-2 py-0.5 rounded font-semibold transition-all ${
+                        previewMode === 'rendered'
+                          ? 'bg-amber-400 text-black shadow-sm'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      Exported MP4
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <Button
                 size="sm"
                 variant="primary"
                 disabled={previewLoading}
                 onClick={handlePreviewRender}
                 className="text-xs gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold shadow-sm"
+                title="Render final high-bitrate vertical video with FFmpeg"
               >
                 {previewLoading ? (
                   <RotateCcw className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Play className="w-3.5 h-3.5 ml-0.5" />
+                  <Download className="w-3.5 h-3.5 ml-0.5" />
                 )}
-                {previewLoading ? 'Rendering 5s Preview...' : 'Preview Render (5s)'}
+                {previewLoading ? 'Rendering FFmpeg MP4...' : 'Render Video (FFmpeg)'}
               </Button>
             </div>
 
             {/* Mobile Phone Mockup Frame */}
-            <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-[38px] p-2 bg-neutral-900 dark:bg-neutral-950 shadow-2xl border-4 border-neutral-800">
+            <div className="relative w-full max-w-[290px] aspect-[9/16] rounded-[38px] p-2 bg-neutral-900 dark:bg-neutral-950 shadow-2xl border-4 border-neutral-800">
               <div
                 ref={phoneCanvasRef}
-                className="relative w-full h-full rounded-[30px] overflow-hidden bg-neutral-900 flex flex-col items-center justify-start select-none"
+                className="relative w-full h-full rounded-[30px] overflow-hidden bg-black flex flex-col items-center justify-start select-none"
               >
                 {/* Phone Speaker Notch */}
                 <div className="absolute top-2 w-20 h-4 bg-neutral-950 rounded-full z-30" />
 
-                {/* Video Render Output if available */}
-                {previewUrl ? (
-                  <video
-                    key={previewUrl}
-                    src={previewUrl}
-                    controls
-                    autoPlay
-                    loop
-                    className="w-full h-full object-cover z-10"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-neutral-500 space-y-2">
-                    <Video className="w-8 h-8 opacity-40" />
-                    <span className="text-xs font-medium">Live 9:16 Canvas</span>
-                    <span className="text-[10px] text-neutral-600">
-                      Drag text layers or click Preview Render to see 5-second dynamic cuts.
-                    </span>
-                  </div>
-                )}
+                {/* Real-time Video Layer */}
+                {previewMode === 'realtime' ? (
+                  <div className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
+                    {/* Active Slot Video */}
+                    {activeSlotRange?.clipPath ? (
+                      <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+                        {/* Ambient Blur Backdrop if contain_blur */}
+                        {activeSlotRange.slot.crop_mode === 'contain_blur' && (
+                          <video
+                            src={`/api/storage/preview/${encodeURIComponent(activeSlotRange.clipPath)}`}
+                            muted
+                            className="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-125 pointer-events-none"
+                          />
+                        )}
+                        <video
+                          ref={videoRef}
+                          src={`/api/storage/preview/${encodeURIComponent(activeSlotRange.clipPath)}`}
+                          playsInline
+                          muted
+                          style={getSlotMotionStyle()}
+                          className={`relative z-10 w-full h-full pointer-events-none ${
+                            activeSlotRange.slot.crop_mode === 'contain_blur' ? 'object-contain' : 'object-cover'
+                          }`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-neutral-500 space-y-2">
+                        <Film className="w-8 h-8 opacity-40 animate-pulse text-amber-400" />
+                        <span className="text-xs font-medium text-neutral-300">Loading Clip Footage...</span>
+                        <span className="text-[10px] text-neutral-500">Select product clips to see live cuts</span>
+                      </div>
+                    )}
 
-                {/* Interactive Drag Text Layers (Displayed on canvas when no video is playing) */}
-                {!previewUrl && (
-                  <>
-                    {/* Title Layer */}
+                    {/* Synchronized Audio */}
+                    <audio ref={audioRef} muted={isMuted} />
+
+                    {/* HUD Info Badge on Video */}
+                    <div className="absolute top-8 left-3 right-3 flex items-center justify-between z-30 pointer-events-none">
+                      <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full text-[10px] text-white border border-white/10 font-mono">
+                        <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+                        <span>Slot {activeSlotRange ? activeSlotRange.index + 1 : 1}/{slotRanges.length}</span>
+                        <span className="text-amber-400">• {activeSlotRange?.slot.label || 'Cut'}</span>
+                      </div>
+                      <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-full text-[10px] text-amber-300 border border-white/10 font-mono font-bold">
+                        {currentTime.toFixed(1)}s / {currentTotalDuration.toFixed(1)}s
+                      </div>
+                    </div>
+
+                    {/* Real-time Draggable Anton Typography Layers */}
+                    {/* Title Hook Layer */}
                     <div
                       onMouseDown={(e) => handleMouseDown('title', e)}
                       style={{
                         top: `${(activeTitleY / 1920) * 100}%`,
                         color: normalizeHexColor(activeTitleColor),
                         fontSize: `${Math.round((activeTitleSize / 1920) * 440)}px`,
+                        textShadow: '0 2px 8px rgba(0,0,0,0.95), 0 0 3px #000, 0 0 1px #000',
+                        fontFamily: 'Anton, Impact, sans-serif',
                       }}
-                      className="absolute w-[86%] text-center font-bold tracking-tight uppercase cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20"
+                      className="absolute w-[90%] left-[5%] text-center font-bold tracking-tight uppercase cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20 select-none pointer-events-auto"
                     >
                       {titleText}
                     </div>
@@ -1715,27 +2220,126 @@ export const StyleStudioPage: React.FC = () => {
                         top: `${(activeSubtitleY / 1920) * 100}%`,
                         color: normalizeHexColor(activeSubtitleColor),
                         fontSize: `${Math.round((activeSubtitleSize / 1920) * 440)}px`,
+                        textShadow: '0 2px 6px rgba(0,0,0,0.95), 0 0 2px #000',
+                        fontFamily: 'Anton, Impact, sans-serif',
                       }}
-                      className="absolute w-[86%] text-center font-bold uppercase tracking-tight cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20"
+                      className="absolute w-[90%] left-[5%] text-center font-bold uppercase tracking-tight cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20 select-none pointer-events-auto"
                     >
                       {subtitleText}
                     </div>
-                  </>
+
+                    {/* Canvas Play/Pause Click Trigger */}
+                    <div
+                      onClick={() => setIsPlaying(!isPlaying)}
+                      className="absolute inset-0 z-10 cursor-pointer flex items-center justify-center group"
+                    >
+                      {!isPlaying && (
+                        <div className="w-12 h-12 rounded-full bg-black/60 border border-white/20 text-white flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                          <Play className="w-6 h-6 ml-1 text-amber-400 fill-current" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Exported FFmpeg MP4 Output */
+                  <video
+                    key={previewUrl || 'none'}
+                    src={previewUrl || ''}
+                    controls
+                    autoPlay
+                    loop
+                    className="w-full h-full object-cover z-10"
+                  />
                 )}
               </div>
             </div>
 
-            {/* Quick Actions underneath phone */}
-            <div className="w-full mt-4 flex items-center justify-between text-xs text-neutral-500">
-              <span className="text-[11px]">Safe Area: 1080x1920</span>
-              {previewUrl && (
+            {/* Real-time Transport Toolbar under Phone Mockup */}
+            <div className="w-full mt-4 p-3 bg-neutral-900 rounded-xl border border-neutral-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-amber-300 text-black flex items-center justify-center font-bold transition-all shadow-sm"
+                    title="Play / Pause (Spacebar)"
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5 fill-current" />}
+                  </button>
+                  <button
+                    onClick={() => handleSeek(0)}
+                    className="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-all"
+                    title="Jump to Start (0s)"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="font-mono text-xs text-neutral-300 font-semibold pl-1">
+                    {currentTime.toFixed(1)}s / {currentTotalDuration.toFixed(1)}s
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setIsMuted(!isMuted)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                      isMuted ? 'bg-red-500/20 text-red-400' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
+                    }`}
+                    title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+                  >
+                    {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  </button>
+                  {previewUrl && (
+                    <button
+                      onClick={() => setPreviewMode(previewMode === 'realtime' ? 'rendered' : 'realtime')}
+                      className="text-xs px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-semibold flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />
+                      {previewMode === 'realtime' ? 'MP4' : 'Live'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick CapCut Editing Shortcuts */}
+              <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-neutral-800">
                 <button
-                  onClick={() => setPreviewUrl(null)}
-                  className="text-xs text-amber-500 hover:underline flex items-center gap-1"
+                  onClick={handleSplitSlotAtPlayhead}
+                  className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[10px] font-semibold flex items-center justify-center gap-1 transition-all"
+                  title="Cut / Split clip at playhead position"
                 >
-                  <RotateCcw className="w-3 h-3" /> Edit Layout & Layers
+                  <Scissors className="w-3 h-3 text-amber-400" /> Split
                 </button>
-              )}
+                <button
+                  onClick={() => {
+                    setClipPickerSlotIndex(selectedSlotIndex);
+                    setShowClipPickerModal(true);
+                  }}
+                  className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[10px] font-semibold flex items-center justify-center gap-1 transition-all"
+                  title="Swap raw video clip for this slot"
+                >
+                  <Folder className="w-3 h-3 text-cyan-400" /> Swap
+                </button>
+                <button
+                  onClick={() => handleDuplicateSlot(selectedSlotIndex)}
+                  className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[10px] font-semibold flex items-center justify-center gap-1 transition-all"
+                  title="Duplicate active slot"
+                >
+                  <Copy className="w-3 h-3 text-emerald-400" /> Clone
+                </button>
+                <button
+                  disabled={currentTemplateSlots.length <= 2}
+                  onClick={() => handleDeleteSlot(selectedSlotIndex)}
+                  className="p-1.5 rounded bg-neutral-800 hover:bg-red-950 text-red-400 text-[10px] font-semibold flex items-center justify-center gap-1 disabled:opacity-40 transition-all"
+                  title="Delete active slot"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Actions underneath phone */}
+            <div className="w-full mt-3 flex items-center justify-between text-xs text-neutral-500">
+              <span className="text-[11px]">Safe Area: 1080x1920 (9:16)</span>
+              <span className="text-[10px] text-neutral-400">Spacebar: Play/Pause</span>
             </div>
           </Card>
         </div>
@@ -1902,6 +2506,115 @@ export const StyleStudioPage: React.FC = () => {
               >
                 Create Style
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: CapCut Clip Picker */}
+      {showClipPickerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4 shadow-2xl text-white max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div>
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <Film className="w-4 h-4 text-amber-400" />
+                  Select Footage for Slot #{(clipPickerSlotIndex ?? selectedSlotIndex) + 1}
+                </h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Choose video footage from product clips or upload a new clip to insert into this cut.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowClipPickerModal(false)}
+                className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center"
+              >
+                <X className="w-4 h-4 text-neutral-400" />
+              </button>
+            </div>
+
+            {/* Upload New Clip Quick Action */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-800/60 border border-dashed border-neutral-700">
+              <div className="flex items-center gap-2 text-xs text-neutral-300">
+                <Upload className="w-4 h-4 text-amber-400" />
+                <span>Upload video footage directly (.mp4, .mov):</span>
+              </div>
+              <input
+                ref={clipFileInputRef}
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm"
+                onChange={handleUploadClip}
+                className="hidden"
+                id="slot-clip-file-upload"
+              />
+              <label
+                htmlFor="slot-clip-file-upload"
+                className="cursor-pointer px-3 py-1.5 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-xs font-semibold text-white flex items-center gap-1.5 transition-all"
+              >
+                {uploadingClip ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                {uploadingClip ? 'Uploading...' : 'Upload Clip'}
+              </label>
+            </div>
+
+            {/* Clips Grid */}
+            <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pr-1 py-1">
+              {productClips.length === 0 ? (
+                <div className="col-span-full py-8 text-center text-xs text-neutral-500">
+                  No video clips found for this product. Upload one above or select another product!
+                </div>
+              ) : (
+                productClips.map((clip) => {
+                  const isCurrentInSlot =
+                    currentTemplateSlots[clipPickerSlotIndex ?? selectedSlotIndex]?.clip_path === clip.file_path;
+
+                  return (
+                    <div
+                      key={clip.id}
+                      onClick={() => handleAssignClip(clipPickerSlotIndex ?? selectedSlotIndex, clip)}
+                      className={`rounded-xl border p-2.5 transition-all cursor-pointer flex flex-col justify-between group select-none ${
+                        isCurrentInSlot
+                          ? 'border-amber-400 bg-amber-400/10'
+                          : 'border-neutral-800 bg-neutral-950 hover:border-neutral-600 hover:bg-neutral-800/40'
+                      }`}
+                    >
+                      <div className="relative aspect-[9/16] max-h-36 w-full rounded-lg bg-black overflow-hidden flex items-center justify-center mb-2">
+                        <video
+                          src={`/api/storage/preview/${encodeURIComponent(clip.file_path)}`}
+                          muted
+                          preload="metadata"
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-1 right-1 font-mono text-[9px] bg-black/80 px-1 py-0.5 rounded text-neutral-200">
+                          {clip.duration.toFixed(1)}s
+                        </span>
+                        {isCurrentInSlot && (
+                          <span className="absolute top-1 left-1 font-mono text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                            <Check className="w-2.5 h-2.5" /> In Slot
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold truncate text-neutral-200" title={clip.filename}>
+                          {clip.filename}
+                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-neutral-400">
+                          <span>{clip.resolution || '1080p'}</span>
+                          <span>{clip.tags || 'footage'}</span>
+                        </div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant={isCurrentInSlot ? 'primary' : 'secondary'}
+                        className="w-full mt-2 text-[11px] h-7"
+                      >
+                        {isCurrentInSlot ? 'Active Clip' : 'Select Clip'}
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

@@ -101,6 +101,16 @@ async def list_music_tracks() -> List[Dict[str, Any]]:
                     })
     return music_files
 
+@router.get("/music-stream/{filename:path}")
+async def stream_music_file(filename: str):
+    """Streams background music audio file for real-time CapCut-style preview."""
+    candidates = [Path("data/music"), Path("/app/data/music"), Path("legacy_private/video-editor/music")]
+    for c in candidates:
+        target = c / filename
+        if target.exists() and target.is_file():
+            return FileResponse(target, media_type="audio/mpeg")
+    raise HTTPException(status_code=404, detail=f"Music track '{filename}' not found.")
+
 @router.get("/templates")
 async def list_templates_endpoint() -> List[Dict[str, Any]]:
     """Returns all CapCut-style templates with fixed audio and preset layout."""
