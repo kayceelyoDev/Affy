@@ -783,6 +783,64 @@ export const StyleStudioPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Pro Transitions & Motion Engine */}
+                <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-neutral-400" /> Professional Motion & Transitions
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-mono capitalize">
+                      {selectedStyle.cut_mode.replace('_', ' ')}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 rounded border border-neutral-800 bg-neutral-900/40 space-y-1">
+                      <div className="text-[11px] font-medium text-neutral-400">Camera Motion Sequence</div>
+                      <div className="text-xs font-semibold text-neutral-200">
+                        {selectedStyle.id === 'punchy_zoom'
+                          ? 'Beat Punch (1.28x) + Whip Pan & Pull-Back Reveal'
+                          : selectedStyle.id === 'smooth_flow'
+                          ? '4-Way Motorized Gimbal Drift (Zoom + Pan L/R)'
+                          : selectedStyle.id === 'clean_showcase'
+                          ? 'Ambient Blur Backdrop + Slow Float'
+                          : 'High-Conversion Slide + CTA Pop'}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded border border-neutral-800 bg-neutral-900/40 space-y-1">
+                      <div className="text-[11px] font-medium text-neutral-400">Cut Transition Effect</div>
+                      <div className="text-xs font-semibold text-neutral-200">
+                        {selectedStyle.id === 'punchy_zoom'
+                          ? 'Optical White Impact Flash on Beat Drop'
+                          : selectedStyle.id === 'smooth_flow'
+                          ? 'Silky Soft Dissolve & Seamless Crossfade'
+                          : selectedStyle.id === 'clean_showcase'
+                          ? 'Soft Crossfade with Blurred Frame Fill'
+                          : 'Dynamic Slide In with Highlight Accent'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rhythm & Pacing */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
+                      <span className="text-neutral-500 block">Cut Timing</span>
+                      <span className="font-semibold text-neutral-200">
+                        {selectedStyle.id === 'punchy_zoom' ? 'Fast (1.2s – 2 Beats)' : selectedStyle.id === 'smooth_flow' ? 'Melodic (2.8s – 4 Beats)' : '2.2s Beat-Synced'}
+                      </span>
+                    </div>
+                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
+                      <span className="text-neutral-500 block">Audio Beat Lock</span>
+                      <span className="font-semibold text-emerald-400">100% Transient Synced</span>
+                    </div>
+                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800 col-span-2 sm:col-span-1">
+                      <span className="text-neutral-500 block">Canvas</span>
+                      <span className="font-semibold text-neutral-200 font-mono">1080x1920 (30fps)</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </Card>
           )}

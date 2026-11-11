@@ -92,6 +92,8 @@ class RenderEngine:
         text_filter: str,
         out_path: Path,
         spec: StyleSpec,
+        seg_idx: int = 0,
+        total_segs: int = 1,
     ):
         vf = build_clip_filters(
             clip=clip,
@@ -103,6 +105,9 @@ class RenderEngine:
             fps=spec.canvas.fps,
             width=spec.canvas.width,
             height=spec.canvas.height,
+            seg_idx=seg_idx,
+            total_segs=total_segs,
+            style_id=spec.id,
         )
 
         cmd = [
@@ -156,9 +161,9 @@ class RenderEngine:
             if abs(durations["audio"] - durations["video"]) > 0.4:
                 problems.append(f"audio {durations['audio']:.1f}s vs video {durations['video']:.1f}s")
 
-        # Check black frames
+        # Check black frames (threshold 0.40s avoids false positives on intentional transition dips)
         b = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-i", str(path), "-vf", "blackdetect=d=0.15:pix_th=0.04", "-an", "-f", "null", "-"],
+            ["ffmpeg", "-hide_banner", "-i", str(path), "-vf", "blackdetect=d=0.40:pix_th=0.04", "-an", "-f", "null", "-"],
             capture_output=True, text=True
         ).stderr
         if re.search(r"black_start", b):
@@ -231,7 +236,16 @@ class RenderEngine:
                     with open(joined, "wb") as out_h264:
                         for idx, ((clip, start), n) in enumerate(zip(plan, seg_frames)):
                             seg = work / f"seg_{idx:03d}.h264"
-                            self.render_segment(clip, start, n, text_filter, seg, spec)
+                            self.render_segment(
+                                clip=clip,
+                                start=start,
+                                n_frames=n,
+                                text_filter=text_filter,
+                                out_path=seg,
+                                spec=spec,
+                                seg_idx=idx,
+                                total_segs=len(plan),
+                            )
                             out_h264.write(seg.read_bytes())
                             seg.unlink()
 

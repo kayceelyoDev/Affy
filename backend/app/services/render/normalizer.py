@@ -69,6 +69,9 @@ def build_clip_filters(
     fps: int = 30,
     width: int = 1080,
     height: int = 1920,
+    seg_idx: int = 0,
+    total_segs: int = 1,
+    style_id: str = "classic_hook",
 ) -> str:
     """Builds glitch-defended FFmpeg video filter chain for an individual clip segment."""
     f = []
@@ -91,17 +94,54 @@ def build_clip_filters(
         f.append(f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=bicubic:out_range=tv:out_color_matrix=bt709")
         f.append(f"crop={width}:{height}")
 
-    # 3. Motion effects (slow zoom / zoom punch / smooth drift)
-    if motion_type == "zoom_punch":
-        # Dynamic zoom punch: burst to 1.18x on beat hit and ease back to 1.0x over first 12 frames (~0.4s)
-        f.append(f"zoompan=z='if(lte(on,12),1.18-0.015*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
-    elif motion_type in ("smooth_flow", "smooth_drift"):
-        # Smooth Ken Burns slow cinematic drift + gentle soft dissolves
-        seg_dur = max(0.5, n_frames / fps)
-        fade_d = min(0.25, max(0.08, seg_dur * 0.15))
+    # 3. Professional Motion & Beat-Synced Transition Effects
+    seg_dur = max(0.4, n_frames / fps)
+
+    if motion_type == "zoom_punch" or style_id in ("punchy_zoom", "punchy"):
+        # Dynamic pro affiliate cut rotation:
+        # Cut 0: Explosive beat punch (1.28x -> 1.0x) + optical white flash
+        # Cut 1: Pull-back detail reveal (starts 1.22x -> pulls back to 1.0x) + flash
+        # Cut 2: Dynamic whip-in from left (horizontal shift + punch)
+        # Cut 3: Dynamic whip-in from right (horizontal shift + punch)
+        mode_idx = seg_idx % 4
+        if mode_idx == 0:
+            # Explosive beat punch zoom
+            f.append(f"zoompan=z='if(lte(on,10),1.28-0.028*on,1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append("fade=t=in:st=0:d=0.08:color=white")
+        elif mode_idx == 1:
+            # Pull-back detail reveal
+            f.append(f"zoompan=z='max(1.0, 1.22-0.007*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append("fade=t=in:st=0:d=0.07:color=white")
+        elif mode_idx == 2:
+            # Dynamic Whip-in Left
+            f.append(f"zoompan=z='if(lte(on,10),1.20-0.02*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)+(6-on)*25,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append("fade=t=in:st=0:d=0.07:color=white")
+        else:
+            # Dynamic Whip-in Right
+            f.append(f"zoompan=z='if(lte(on,10),1.20-0.02*on,1.0)':d=1:x='if(lte(on,6),iw/2-(iw/zoom/2)-(6-on)*25,iw/2-(iw/zoom/2))':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+            f.append("fade=t=in:st=0:d=0.07:color=white")
+
+    elif motion_type in ("smooth_flow", "smooth_drift") or style_id in ("smooth_flow", "smooth"):
+        # Professional 4-way continuous luxury slider motion + silky dissolves:
+        # Segment 0: Slow elegant zoom in (1.0 -> 1.09)
+        # Segment 1: Slow continuous pan left
+        # Segment 2: Slow elegant pull back (1.09 -> 1.0)
+        # Segment 3: Slow continuous pan right
+        frames_den = max(1, n_frames)
+        mode_idx = seg_idx % 4
+        if mode_idx == 0:
+            f.append(f"zoompan=z='min(zoom+0.0009,1.09)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif mode_idx == 1:
+            f.append(f"zoompan=z=1.06:d=1:x='iw/2-(iw/zoom/2)-(on/{frames_den})*45':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        elif mode_idx == 2:
+            f.append(f"zoompan=z='max(1.0, 1.09-0.0008*on)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+        else:
+            f.append(f"zoompan=z=1.06:d=1:x='iw/2-(iw/zoom/2)+(on/{frames_den})*45':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
+
+        fade_d = min(0.12, max(0.06, seg_dur * 0.08))
         fade_out_st = max(0.0, seg_dur - fade_d)
-        f.append(f"zoompan=z='min(zoom+0.0008,1.08)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
         f.append(f"fade=t=in:st=0:d={fade_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_d:.3f}")
+
     elif motion_type == "slow_zoom":
         f.append(f"zoompan=z='min(zoom+0.0012,1.12)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}")
 

@@ -103,8 +103,13 @@ def compile_text_filters(
             
             color = title_layer.color if i == 0 else (sub_layer.color if sub_layer else "white")
             alpha_expr = ""
-            if title_layer.animation == "fade_out_2s":
-                alpha_expr = ":alpha='if(lt(t,1.8),1,max(0,1-(t-1.8)/0.4))'"
+            anim = title_layer.animation or ("pop_in" if spec.id == "punchy_zoom" else ("fade_out_2s" if spec.id == "smooth_flow" else "none"))
+            if anim == "fade_out_2s":
+                alpha_expr = ":alpha='if(lt(t,2.2),min(t/0.35,1),max(0,1-(t-2.2)/0.4))'"
+            elif anim == "fade_in":
+                alpha_expr = ":alpha='min(t/0.35,1)'"
+            elif anim == "pop_in":
+                alpha_expr = ":alpha='if(lt(t,0.06),0,1)'"
                 
             filters.append(
                 f"drawtext=fontfile='{ffmpeg_escape_path(Path(layer_font))}':"
