@@ -24,7 +24,61 @@ class StartRenderRequest(BaseModel):
 
 class AutoEditRequest(BaseModel):
     slot_id: Optional[int] = None
+    product_id: Optional[int] = None
     force: bool = False
+    style_id: Optional[str] = None  # "classic_hook", "clean_showcase", "promo_pop", "punchy_zoom", "smooth_flow", "random", "default"
+
+VALID_BUILTIN_STYLES = [
+    "classic_hook",
+    "clean_showcase",
+    "promo_pop",
+    "punchy_zoom",
+    "smooth_flow",
+]
+
+async def resolve_render_style(
+    requested_style: Optional[str],
+    slot_style: Optional[str],
+    db: AsyncSession,
+    slot_index: int = 0,
+) -> str:
+    """
+    Resolves the exact style ID to render:
+    1. If user explicitly provided style_id (e.g. 'promo_pop' or 'random') in request, honor it.
+    2. Else if global DEFAULT_RENDER_STYLE setting in DB is configured, use it (or rotate if 'random').
+    3. Else if slot has a valid custom style assigned, honor it.
+    """
+    import random
+    from backend.app.models.models import Setting
+
+    # 1. Explicit request style override
+    if requested_style and requested_style not in ("default", ""):
+        if requested_style in ("random", "diverse"):
+            return random.choice(VALID_BUILTIN_STYLES)
+        for s in VALID_BUILTIN_STYLES:
+            if s in requested_style.lower():
+                return s
+        return requested_style
+
+    # Check global default setting in DB
+    setting_stmt = select(Setting).where(Setting.key == "DEFAULT_RENDER_STYLE")
+    setting_rec = (await db.execute(setting_stmt)).scalar_one_or_none()
+    default_setting = setting_rec.value.strip() if setting_rec and setting_rec.value else "classic_hook"
+
+    # 2. Slot-level custom style (only if explicitly set to a non-default style)
+    if slot_style and slot_style not in ("default", "random", "style_1_classic_hook", ""):
+        if slot_style != "classic_hook" or default_setting == "classic_hook":
+            for s in VALID_BUILTIN_STYLES:
+                if s in slot_style.lower():
+                    return s
+
+    # 3. Global setting in DB
+    if default_setting in ("random", "diverse"):
+        return VALID_BUILTIN_STYLES[slot_index % len(VALID_BUILTIN_STYLES)]
+    elif default_setting in VALID_BUILTIN_STYLES:
+        return default_setting
+
+    return "classic_hook"
 
 @router.get("")
 async def list_renders(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
@@ -97,6 +151,36 @@ async def trigger_auto_edit(
     Finds plan slots needing video renders, verifies raw video clips, and queues
     FFmpeg render jobs with Anton font typography, beat cuts, and loudness normalization.
     """
+    # Single Product Direct Render (e.g. from Clip Library)
+    if req and req.product_id and not req.slot_id:
+        prod = await db.get(Product, req.product_id)
+        if not prod:
+            raise HTTPException(status_code=404, detail=f"Product #{req.product_id} not found")
+        clip_stmt = select(Clip).where(Clip.product_id == prod.id, Clip.status == "usable")
+        clips = (await db.execute(clip_stmt)).scalars().all()
+        if not clips:
+            raise HTTPException(status_code=400, detail=f"Product '{prod.name}' has no usable video clips in catalog.")
+
+        chosen_style = await resolve_render_style(req.style_id, None, db, slot_index=0)
+        job = RenderJob(
+            product_id=prod.id,
+            style_id=chosen_style,
+            title=prod.name,
+            subtitle="Trending TikTok Deal",
+            status="pending",
+            clips_count=len(clips),
+        )
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
+        return {
+            "ok": True,
+            "message": f"Queued FFmpeg render job #{job.id} for product '{prod.name}' with style '{chosen_style}'.",
+            "queued_job_ids": [job.id],
+            "job_id": job.id,
+            "style_id": chosen_style,
+        }
+
     target_slots: List[PlanSlot] = []
 
     if req and req.slot_id:
@@ -128,6 +212,14 @@ async def trigger_auto_edit(
                 elif s.status in ("pending", "approved") and not s.render_id:
                     target_slots.append(s)
 
+    if not target_slots and plan:
+        # If all slots were rendered earlier, allow re-rendering unposted slots with requested/default style
+        slots_stmt = select(PlanSlot).where(PlanSlot.plan_id == plan.id)
+        all_slots = (await db.execute(slots_stmt)).scalars().all()
+        for s in all_slots:
+            if s.status not in ("posted", "published"):
+                target_slots.append(s)
+
     if not target_slots:
         return {"ok": True, "message": "All slots are already rendered or queued.", "queued_job_ids": []}
 
@@ -157,10 +249,18 @@ async def trigger_auto_edit(
         clip_stmt = select(Clip).where(Clip.product_id == prod.id, Clip.status == "usable")
         clips = (await db.execute(clip_stmt)).scalars().all()
 
+        chosen_style = await resolve_render_style(
+            requested_style=req.style_id if req else None,
+            slot_style=slot.style_id,
+            db=db,
+            slot_index=slot.slot_index,
+        )
+        slot.style_id = chosen_style
+
         job = RenderJob(
             product_id=prod.id,
             plan_slot_id=slot.id,
-            style_id=slot.style_id or "classic_hook",
+            style_id=chosen_style,
             title=prod.name,
             subtitle=slot.hook_style or "Trending Viral Find",
             status="pending",

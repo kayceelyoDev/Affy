@@ -117,8 +117,19 @@ class DailyPlannerService:
 
         planned_slots: List[Dict[str, Any]] = []
 
+        # Determine default style preference from settings
+        from backend.app.models.models import Setting
+        setting_stmt = select(Setting).where(Setting.key == "DEFAULT_RENDER_STYLE")
+        setting_rec = (await db.execute(setting_stmt)).scalar_one_or_none()
+        default_style_pref = setting_rec.value.strip() if setting_rec and setting_rec.value else "random"
+        builtin_styles = ["classic_hook", "punchy_zoom", "clean_showcase", "promo_pop", "smooth_flow"]
+
         for slot_idx in range(len(self.slot_times)):
             time_str = self.slot_times[slot_idx]
+            assigned_style = (
+                default_style_pref if default_style_pref in builtin_styles
+                else builtin_styles[slot_idx % len(builtin_styles)]
+            )
 
             # If slot is locked, keep it untouched
             if slot_idx in existing_locked_slots:
@@ -172,7 +183,7 @@ class DailyPlannerService:
                     "scheduled_time": time_str,
                     "product_id": None,
                     "product_name": "No Eligible Product",
-                    "style_id": "style_1_classic_hook",
+                    "style_id": assigned_style,
                     "hook_style": AVAILABLE_HOOKS[slot_idx % len(AVAILABLE_HOOKS)],
                     "hook_text": None,
                     "reason": "No active products with >= 4 usable clips found.",
@@ -190,7 +201,7 @@ class DailyPlannerService:
                 "scheduled_time": time_str,
                 "product_id": chosen_entry["product"].id,
                 "product_name": chosen_entry["product"].name,
-                "style_id": "style_1_classic_hook",
+                "style_id": assigned_style,
                 "hook_style": hook,
                 "hook_text": f"Hook: {hook} for {chosen_entry['product'].name}",
                 "reason": reason,

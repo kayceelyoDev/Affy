@@ -93,6 +93,7 @@ async def generate_plan(
     )
     return res
 
+@router.patch("/slots/{slot_id}")
 @router.put("/slots/{slot_id}")
 async def update_slot(
     slot_id: int,

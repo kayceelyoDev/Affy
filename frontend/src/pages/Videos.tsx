@@ -14,6 +14,7 @@ import {
   Clock,
   RotateCcw,
   Trash2,
+  ChevronDown,
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Table } from '../components/ui';
 import { api } from '../api/client';
@@ -52,6 +53,21 @@ interface RenderJobItem {
   created_at: string;
 }
 
+const formatStyleName = (styleId?: string) => {
+  if (!styleId) return 'Punchy Zoom';
+  const map: Record<string, string> = {
+    classic_hook: 'Classic Hook',
+    style_1_classic_hook: 'Classic Hook',
+    clean_showcase: 'Clean Showcase',
+    promo_pop: 'Promo Pop',
+    punchy_zoom: 'Punchy Zoom',
+    smooth_flow: 'Smooth Flow',
+    random: 'Random / Diverse',
+    default: 'Default Style',
+  };
+  return map[styleId.toLowerCase()] || styleId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 export const VideosPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'posts' | 'renders'>('posts');
   const [posts, setPosts] = useState<PostItem[]>([]);
@@ -65,6 +81,7 @@ export const VideosPage: React.FC = () => {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<{ title: string; subtitle?: string; url: string; caption?: string } | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
+  const [selectedBatchStyle, setSelectedBatchStyle] = useState('default');
   const [editing, setEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [actionAlert, setActionAlert] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -125,7 +142,11 @@ export const VideosPage: React.FC = () => {
     setEditing(true);
     setActionAlert({ type: 'info', text: 'Queueing FFmpeg auto-edit for open plan slots...' });
     try {
-      const res = await api.post('/api/renders/auto-edit');
+      const payload: any = {};
+      if (selectedBatchStyle !== 'default') {
+        payload.style_id = selectedBatchStyle;
+      }
+      const res = await api.post('/api/renders/auto-edit', payload);
       setActionAlert({
         type: 'success',
         text: res.message || 'Render jobs queued successfully. FFmpeg worker is rendering videos.',
@@ -239,16 +260,35 @@ export const VideosPage: React.FC = () => {
             </Button>
           )}
 
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={editing}
-            onClick={handleTriggerAutoEdit}
-            className="gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black"
-          >
-            <Film className={`w-3.5 h-3.5 ${editing ? 'animate-spin' : ''}`} />
-            Run Auto-Edit (FFmpeg)
-          </Button>
+          <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-1 rounded-control shadow-sm">
+            <div className="relative flex items-center">
+              <select
+                value={selectedBatchStyle}
+                onChange={(e) => setSelectedBatchStyle(e.target.value)}
+                className="text-xs bg-transparent border-0 pl-2.5 pr-7 py-1 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none appearance-none font-medium"
+                title="Select editing style for Auto-Edit"
+              >
+                <option value="default" className="bg-neutral-900 text-neutral-100">Default Style (Settings)</option>
+                <option value="random" className="bg-neutral-900 text-neutral-100">Random / Diverse (All Styles)</option>
+                <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+                <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+                <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+                <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+                <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 absolute right-2 pointer-events-none text-neutral-400" />
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={editing}
+              onClick={handleTriggerAutoEdit}
+              className="gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black whitespace-nowrap shadow-sm"
+            >
+              <Film className={`w-3.5 h-3.5 ${editing ? 'animate-spin' : ''}`} />
+              Run Auto-Edit (FFmpeg)
+            </Button>
+          </div>
 
           <Button
             variant="primary"
@@ -430,8 +470,11 @@ export const VideosPage: React.FC = () => {
                           </p>
                         </td>
                         <td className="p-3 space-y-1">
-                          <div className="font-medium text-neutral-800 dark:text-neutral-200">{post.hook_style}</div>
-                          <div className="text-[10px] text-neutral-400">{post.style_id}</div>
+                          <div className="font-medium text-neutral-800 dark:text-neutral-200">{post.hook_style || 'Product Pitch'}</div>
+                          <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-neutral-500"></span>
+                            <span>{formatStyleName(post.style_id)}</span>
+                          </div>
                         </td>
                         <td className="p-3">
                           <Badge
@@ -542,7 +585,7 @@ export const VideosPage: React.FC = () => {
                         {job.title}
                         {job.subtitle && <p className="text-[11px] font-normal text-neutral-400">{job.subtitle}</p>}
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-neutral-500">{job.style_id}</td>
+                      <td className="p-3 text-[11px] text-neutral-400 font-medium">{formatStyleName(job.style_id)}</td>
                       <td className="p-3">
                         <Badge
                           variant={

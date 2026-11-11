@@ -25,6 +25,47 @@
 | **Fix** | Auth, CSRF & Full Views | R01, R02, R03, R17, R21 | **DONE** | **PASSED** (Real login & product creation verified) |
 | **Pipeline** | End-to-End 4-Workflow Automation & Zero Mock Data | R01-R22, PDF Parity | **DONE** | **PASSED** (Auto-Edit FFmpeg & Buffer Posting verified live) |
 | **Folder=Prod**| Google Drive Subfolders as Products, Clip Library UI & Complete Clean Slate | R05, R17, UI Parity | **DONE** | **PASSED** (commit `c306d8c`) |
+| **Styles** | Flexible Video Style Selection: Per-Video, Default & Random Diverse Modes | R12, R13, R14, R15, R16 | **DONE** | **PASSED** (commit `a02b787`) |
+| **Studio** | Style Studio Live Product Preview, One-Click Default & Complete Emoji Elimination | R12-R16, UI Cleanliness | **DONE** | **PASSED** (Verified live with Punchy Zoom render) |
+
+---
+
+## 2. Style Studio Live Product Preview, One-Click Default Style & Complete Emoji Elimination
+
+1. **Style Studio (`/styles`) End-to-End Real-Time Previews:**
+   - **Product Selector Dropdown**: Automatically fetches real synced products (`ATTACK SHARK X11`, `20000MAH POWERBANK`, etc.) with clip counts.
+   - **Real Footage & Music Preview Engine**: `POST /api/styles/preview` pulls actual 1080x1920 clips from the chosen product's Google Drive sync folder and beat-matched audio from `/data/music/`, generating a fast 5-6s preview MP4 with exact Anton typography and transition effects.
+   - **Live 9:16 Phone Mockup Video Player**: Streams the generated MP4 via `GET /api/styles/preview-video/{filename}` directly into the mobile canvas with full native HTML5 video controls, loops, and unmute capabilities.
+   - **One-Click "Set as Default Style"**: Directly updates `DEFAULT_RENDER_STYLE` in the database, automatically cascades to all open unposted plan slots, and displays a clean `DEFAULT` badge on the active style card.
+
+2. **Complete Emoji Elimination Across All Interfaces:**
+   - Fully purged all emojis (`⚙️`, `🎲`, `✨`, `🎨`, `🔥`, `⚡`, `🌊`) from all select dropdowns, buttons, and badges across `Videos.tsx`, `Settings.tsx`, `Planner.tsx`, `Dashboard.tsx`, `Clips.tsx`, and `StyleStudio.tsx`.
+   - Replaced clashing native Windows select popup styles with sleek Apple/Notion dark monochrome selects (`bg-neutral-900 border border-neutral-800 text-neutral-100` with subtle chevrons).
+   - Cleanly humanized internal snake_case style identifiers in tables and queues (`style_1_classic_hook` -> `Classic Hook`, `punchy_zoom` -> `Punchy Zoom`).
+
+3. **Flexible Video Style Selection: Per-Video, Default Style & Random Diverse Modes
+
+1. **Global Default Render Style Setting (`Settings.tsx` & Backend):**
+   - Added `DEFAULT_RENDER_STYLE` configuration in Settings under Publishing Rules.
+   - Allows creators to select:
+     - `🎲 Random / Diverse Rotation` (unique rotation across all 5 styles for every video).
+     - Or pin a specific default style (`classic_hook`, `clean_showcase`, `promo_pop`, `punchy_zoom`, `smooth_flow`) to apply to all videos.
+   - Initialized and persisted via `PUT /api/settings/DEFAULT_RENDER_STYLE`.
+
+2. **Per-Video / Per-Slot Style Customization (`Planner.tsx` & `Dashboard.tsx`):**
+   - Each content slot in Today's Content Plan now features an interactive **Style Selector Dropdown**.
+   - Creators can change the style of any specific slot on the fly (e.g., set Slot 1 to `promo_pop`, Slot 2 to `punchy_zoom`).
+   - Changing the dropdown immediately persists the selection via `PUT /api/planner/slots/{slot_id}` and renders that video in the selected style.
+
+3. **Action Bar Style Override for Batch Auto-Edit:**
+   - On **Dashboard**, **Today's Plan (`/planner`)**, **Videos (`/videos`)**, and **Clip Library (`/clips`)**:
+     - Added a Style Mode selector beside the "Run Auto-Edit (FFmpeg)" button.
+     - Creators can choose `Default (from Settings)`, `Random / Diverse (All Styles)`, or any specific style before clicking Auto-Edit.
+     - Backend API `POST /api/renders/auto-edit` accepts `style_id` (`"random"`, `"default"`, or specific style name) and resolves render styles dynamically.
+
+4. **Style Spec Normalization in Render Engine (`engine.py`):**
+   - Robust alias mapping ensures legacy or alternate IDs (`style_1_classic_hook`, `clean`, `zoom`, etc.) automatically map to their canonical JSON style definition.
+   - Tested and verified live: Render job #7 rendered with style `promo_pop` in 16.57s.
 
 ---
 

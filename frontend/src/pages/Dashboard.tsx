@@ -22,6 +22,7 @@ export const DashboardPage: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [selectedBatchStyle, setSelectedBatchStyle] = useState('default');
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [actionAlert, setActionAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
@@ -86,14 +87,21 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleTriggerAutoEdit = async (slotId?: number) => {
+  const handleTriggerAutoEdit = async (slotId?: number, slotStyle?: string) => {
     setEditing(true);
     setActionAlert({
       type: 'info',
       message: slotId ? `Queuing FFmpeg render for slot #${slotId}...` : 'Scanning slots and queuing FFmpeg auto-edits...',
     });
     try {
-      const res = await api.post('/api/renders/auto-edit', slotId ? { slot_id: slotId } : {});
+      const payload: any = {};
+      if (slotId) {
+        payload.slot_id = slotId;
+        if (slotStyle) payload.style_id = slotStyle;
+      } else if (selectedBatchStyle !== 'default') {
+        payload.style_id = selectedBatchStyle;
+      }
+      const res = await api.post('/api/renders/auto-edit', payload);
       setActionAlert({
         type: 'success',
         message: res.message || 'Render jobs queued successfully. FFmpeg worker is rendering videos.',
@@ -103,6 +111,21 @@ export const DashboardPage: React.FC = () => {
       setActionAlert({ type: 'error', message: 'Auto-edit failed: ' + e.message });
     } finally {
       setEditing(false);
+    }
+  };
+
+  const handleUpdateSlotStyle = async (slotId: number, styleId: string) => {
+    try {
+      await api.put(`/api/planner/slots/${slotId}`, { style_id: styleId });
+      setTodaySlots((prev) =>
+        prev.map((s) => (s.id === slotId ? { ...s, style_id: styleId } : s))
+      );
+      setActionAlert({
+        type: 'success',
+        message: `Slot #${slotId} style updated to ${styleId.replace(/_/g, ' ')}.`,
+      });
+    } catch (e: any) {
+      setActionAlert({ type: 'error', message: `Failed to update style: ${e.message}` });
     }
   };
 
@@ -189,17 +212,33 @@ export const DashboardPage: React.FC = () => {
             Generate Plan
           </Button>
 
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={editing}
-            onClick={() => handleTriggerAutoEdit()}
-            className="flex items-center gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black hover:opacity-90"
-            title="Workflow 3: Auto-Edit eligible product videos using FFmpeg with Anton font and beat cuts"
-          >
-            <Film className={`w-3.5 h-3.5 ${editing ? 'animate-spin' : ''}`} />
-            Run Auto-Edit (FFmpeg)
-          </Button>
+          <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-control">
+            <select
+              value={selectedBatchStyle}
+              onChange={(e) => setSelectedBatchStyle(e.target.value)}
+              className="text-xs bg-transparent border-0 px-2 py-1 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none"
+              title="Select editing style for Auto-Edit"
+            >
+              <option value="default" className="bg-neutral-900 text-neutral-100">Default Style (Settings)</option>
+              <option value="random" className="bg-neutral-900 text-neutral-100">Random / Diverse (All Styles)</option>
+              <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+              <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+              <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+              <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+              <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+            </select>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={editing}
+              onClick={() => handleTriggerAutoEdit()}
+              className="flex items-center gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black hover:opacity-90 whitespace-nowrap"
+              title="Workflow 3: Auto-Edit eligible product videos using FFmpeg with selected style"
+            >
+              <Film className={`w-3.5 h-3.5 ${editing ? 'animate-spin' : ''}`} />
+              Run Auto-Edit (FFmpeg)
+            </Button>
+          </div>
 
           <Button
             variant="primary"
@@ -352,6 +391,22 @@ export const DashboardPage: React.FC = () => {
                         Hook: <span className="text-neutral-700 dark:text-neutral-300 font-medium">{slot.hook_style}</span>
                         {slot.reason && <span className="hidden md:inline"> · {slot.reason}</span>}
                       </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[10px] text-neutral-400">Style:</span>
+                        <select
+                          value={slot.style_id?.replace(/^style_\d+_/, '') || 'classic_hook'}
+                          onChange={(e) => handleUpdateSlotStyle(slot.id, e.target.value)}
+                          disabled={isRendering || isRendered || isPosted}
+                          className="text-[10px] font-medium rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 px-1.5 py-0.5 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none"
+                          title="Change style for this specific video"
+                        >
+                          <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+                          <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+                          <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+                          <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+                          <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -376,7 +431,7 @@ export const DashboardPage: React.FC = () => {
                         variant="secondary"
                         size="sm"
                         disabled={editing}
-                        onClick={() => handleTriggerAutoEdit(slot.id)}
+                        onClick={() => handleTriggerAutoEdit(slot.id, slot.style_id)}
                         className="text-xs py-1 px-2.5 flex items-center gap-1"
                         title="Render video for this slot using FFmpeg"
                       >

@@ -25,8 +25,26 @@ class RenderEngine:
         if style_id in self._styles_cache:
             return self._styles_cache[style_id]
 
+        clean_id = style_id.lower()
+        if "classic" in clean_id:
+            clean_id = "classic_hook"
+        elif "showcase" in clean_id or "clean" in clean_id:
+            clean_id = "clean_showcase"
+        elif "promo" in clean_id or "pop" in clean_id:
+            clean_id = "promo_pop"
+        elif "zoom" in clean_id or "punch" in clean_id:
+            clean_id = "punchy_zoom"
+        elif "flow" in clean_id or "smooth" in clean_id:
+            clean_id = "smooth_flow"
+
+        if clean_id in self._styles_cache:
+            return self._styles_cache[clean_id]
+
         file_candidates = [
+            self.styles_dir / f"{clean_id}.style.json",
             self.styles_dir / f"{style_id}.style.json",
+            Path(f"styles/builtin/{clean_id}.style.json"),
+            Path(f"/app/styles/builtin/{clean_id}.style.json"),
             Path(f"styles/builtin/{style_id}.style.json"),
             Path(f"/app/styles/builtin/{style_id}.style.json"),
         ]
@@ -35,6 +53,7 @@ class RenderEngine:
                 try:
                     spec = StyleSpec.model_validate_json(f.read_text(encoding="utf-8"))
                     self._styles_cache[style_id] = spec
+                    self._styles_cache[clean_id] = spec
                     return spec
                 except Exception as e:
                     logger.warning("failed_to_parse_style", file=str(f), error=str(e))

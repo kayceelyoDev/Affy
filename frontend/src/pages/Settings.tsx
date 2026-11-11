@@ -46,6 +46,7 @@ export const SettingsPage: React.FC = () => {
   const [currency, setCurrency] = useState('PHP');
   const [scoringProfile, setScoringProfile] = useState('v2');
   const [dailyQuota, setDailyQuota] = useState('6');
+  const [defaultRenderStyle, setDefaultRenderStyle] = useState('random');
   const [bannedClaims, setBannedClaims] = useState('cure, guaranteed, 100% legit, fda approved, approved ng dti');
   const [enableTikTokAudio, setEnableTikTokAudio] = useState(false);
 
@@ -71,6 +72,9 @@ export const SettingsPage: React.FC = () => {
 
       const dq = items.find((i) => i.key === 'DAILY_QUOTA');
       if (dq) setDailyQuota(dq.value);
+
+      const drs = items.find((i) => i.key === 'DEFAULT_RENDER_STYLE');
+      if (drs) setDefaultRenderStyle(drs.value);
 
       const bc = items.find((i) => i.key === 'BANNED_CLAIMS');
       if (bc) setBannedClaims(bc.value);
@@ -414,6 +418,28 @@ export const SettingsPage: React.FC = () => {
                 onChange={(e) => setDailyQuota(e.target.value)}
                 onBlur={() => handleSaveSetting('DAILY_QUOTA', dailyQuota)}
               />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Default Video Render Style</label>
+              <p className="text-[11px] text-neutral-500 mb-1.5">
+                Default editing and typography style for automated rendering. Choose "Random / Diverse" to rotate styles across videos, or select a specific default style to use across all videos.
+              </p>
+              <select
+                value={defaultRenderStyle}
+                onChange={(e) => {
+                  setDefaultRenderStyle(e.target.value);
+                  handleSaveSetting('DEFAULT_RENDER_STYLE', e.target.value);
+                }}
+                className="w-full text-xs rounded-input hairline-border bg-white dark:bg-neutral-900 p-2.5 text-neutral-900 dark:text-white"
+              >
+                <option value="random">Random / Diverse Rotation (Rotates through all styles)</option>
+                <option value="classic_hook">Classic Hook (Anton Bold, Yellow Hook, Beat-Synced Cuts)</option>
+                <option value="clean_showcase">Clean Showcase (Blurred Fill, Slow Zoom, Soft Dissolves)</option>
+                <option value="promo_pop">Promo Pop (Top Product Banner, CTA Badge, Slide Transitions)</option>
+                <option value="punchy_zoom">Punchy Zoom (Fast 1.2s Cuts, Zoom Punches, Whip Transitions)</option>
+                <option value="smooth_flow">Smooth Flow (Soft Crossfades, Lower Captions, Title Fade)</option>
+              </select>
             </div>
 
             <div>

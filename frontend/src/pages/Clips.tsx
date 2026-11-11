@@ -54,6 +54,7 @@ export const ClipsPage: React.FC = () => {
   const [syncingDrive, setSyncingDrive] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [renderingProduct, setRenderingProduct] = useState(false);
+  const [selectedRenderStyle, setSelectedRenderStyle] = useState('default');
   const [statusAlert, setStatusAlert] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Upload modal state
@@ -139,14 +140,18 @@ export const ClipsPage: React.FC = () => {
 
   const handleAutoEdit = async (productId?: number) => {
     setRenderingProduct(true);
+    const styleLabel = selectedRenderStyle === 'default' ? 'Default Style' : selectedRenderStyle.replace(/_/g, ' ');
     setStatusAlert({
       type: 'info',
       text: productId
-        ? `Queueing FFmpeg beat-cut auto-edit for product #${productId}...`
-        : 'Queueing FFmpeg beat-cut auto-edit for open daily plan slots...',
+        ? `Queueing FFmpeg auto-edit for product #${productId} (${styleLabel})...`
+        : `Queueing FFmpeg auto-edit for open daily plan slots (${styleLabel})...`,
     });
     try {
-      const payload = productId ? { product_id: productId } : {};
+      const payload: any = {};
+      if (productId) payload.product_id = productId;
+      if (selectedRenderStyle !== 'default') payload.style_id = selectedRenderStyle;
+
       const res = await api.post('/api/renders/auto-edit', payload);
       setStatusAlert({
         type: 'success',
@@ -254,17 +259,33 @@ export const ClipsPage: React.FC = () => {
             {syncingDrive ? 'Syncing Drive...' : 'Sync Google Drive Clips'}
           </Button>
 
-          {/* Auto-Edit Button */}
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => handleAutoEdit(selectedProduct ? selectedProduct.id : undefined)}
-            disabled={renderingProduct || clips.length === 0}
-            className="gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black"
-          >
-            <Play className={`w-3.5 h-3.5 fill-current ${renderingProduct ? 'animate-spin' : ''}`} />
-            {selectedProduct ? `Auto-Edit (${selectedProduct.name.split(' - ')[0]})` : 'Auto-Edit All (FFmpeg)'}
-          </Button>
+          {/* Auto-Edit with Style Selector */}
+          <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-control">
+            <select
+              value={selectedRenderStyle}
+              onChange={(e) => setSelectedRenderStyle(e.target.value)}
+              className="text-xs bg-transparent border-0 px-2 py-1 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none"
+              title="Select editing style"
+            >
+              <option value="default" className="bg-neutral-900 text-neutral-100">Default Style (Settings)</option>
+              <option value="random" className="bg-neutral-900 text-neutral-100">Random / Diverse (All Styles)</option>
+              <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+              <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+              <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+              <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+              <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+            </select>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleAutoEdit(selectedProduct ? selectedProduct.id : undefined)}
+              disabled={renderingProduct || clips.length === 0}
+              className="gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black whitespace-nowrap"
+            >
+              <Play className={`w-3.5 h-3.5 fill-current ${renderingProduct ? 'animate-spin' : ''}`} />
+              {selectedProduct ? `Auto-Edit (${selectedProduct.name.split(' - ')[0]})` : 'Auto-Edit All (FFmpeg)'}
+            </Button>
+          </div>
 
           {/* Rescan Button */}
           <Button variant="secondary" size="sm" onClick={handleRescan} disabled={rescanning}>

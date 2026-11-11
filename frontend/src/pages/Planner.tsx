@@ -41,6 +41,7 @@ export const PlannerPage: React.FC = () => {
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [dryRunMode, setDryRunMode] = useState(false);
   const [autoApproveMode, setAutoApproveMode] = useState(true);
+  const [selectedBatchStyle, setSelectedBatchStyle] = useState<string>("default");
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -82,17 +83,40 @@ export const PlannerPage: React.FC = () => {
     }
   };
 
-  const handleRunAutoEdit = async (slotId?: number) => {
+  const handleRunAutoEdit = async (slotId?: number, slotStyle?: string) => {
     setEditing(true);
     setActionMsg(null);
     try {
-      const res = await api.post("/api/renders/auto-edit", slotId ? { slot_id: slotId } : {});
+      const payload: any = {};
+      if (slotId) {
+        payload.slot_id = slotId;
+        if (slotStyle) payload.style_id = slotStyle;
+      } else if (selectedBatchStyle !== "default") {
+        payload.style_id = selectedBatchStyle;
+      }
+      const res = await api.post("/api/renders/auto-edit", payload);
       setActionMsg({ text: res.message || "FFmpeg auto-edit jobs queued successfully." });
       await fetchTodayPlan();
     } catch (err: any) {
       setActionMsg({ text: `Auto-edit error: ${err.message}`, error: true });
     } finally {
       setEditing(false);
+    }
+  };
+
+  const handleUpdateSlotStyle = async (slotId: number, styleId: string) => {
+    try {
+      await api.put(`/api/planner/slots/${slotId}`, { style_id: styleId });
+      setPlan((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          slots: prev.slots.map((s) => (s.id === slotId ? { ...s, style_id: styleId } : s)),
+        };
+      });
+      setActionMsg({ text: `Slot #${slotId} style updated to ${styleId.replace(/_/g, " ")}.` });
+    } catch (err: any) {
+      setActionMsg({ text: `Failed to update style: ${err.message}`, error: true });
     }
   };
 
@@ -158,16 +182,32 @@ export const PlannerPage: React.FC = () => {
             {generating ? "Generating..." : "Generate Plan"}
           </Button>
 
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={editing}
-            onClick={() => handleRunAutoEdit()}
-            className="bg-neutral-900 text-white dark:bg-white dark:text-black"
-          >
-            <Film className={`w-3.5 h-3.5 mr-1.5 ${editing ? 'animate-spin' : ''}`} />
-            Run Auto-Edit All
-          </Button>
+          <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-control">
+            <select
+              value={selectedBatchStyle}
+              onChange={(e) => setSelectedBatchStyle(e.target.value)}
+              className="text-xs bg-transparent border-0 px-2 py-1 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none"
+              title="Select rendering style"
+            >
+              <option value="default" className="bg-neutral-900 text-neutral-100">Default Style (Settings)</option>
+              <option value="random" className="bg-neutral-900 text-neutral-100">Random / Diverse (All Styles)</option>
+              <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+              <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+              <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+              <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+              <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+            </select>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={editing}
+              onClick={() => handleRunAutoEdit()}
+              className="bg-neutral-900 text-white dark:bg-white dark:text-black whitespace-nowrap"
+            >
+              <Film className={`w-3.5 h-3.5 mr-1.5 ${editing ? 'animate-spin' : ''}`} />
+              Run Auto-Edit All
+            </Button>
+          </div>
 
           <Button
             size="sm"
@@ -305,9 +345,21 @@ export const PlannerPage: React.FC = () => {
                     <span className="text-neutral-400">Hook:</span>
                     <span className="font-medium text-neutral-800 dark:text-neutral-200">{slot.hook_style}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-neutral-400">Style:</span>
-                    <span className="font-mono text-[11px] text-neutral-500">{slot.style_id}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-neutral-400 shrink-0">Style:</span>
+                    <select
+                      value={slot.style_id?.replace(/^style_\d+_/, '') || 'classic_hook'}
+                      onChange={(e) => handleUpdateSlotStyle(slot.id, e.target.value)}
+                      disabled={isRendering || isRendered || isPosted}
+                      className="text-[11px] font-medium rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 px-2 py-0.5 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none max-w-[150px] truncate"
+                      title="Change style for this specific video"
+                    >
+                      <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+                      <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+                      <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+                      <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+                      <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+                    </select>
                   </div>
                 </div>
 
@@ -325,7 +377,7 @@ export const PlannerPage: React.FC = () => {
                     variant="secondary"
                     className="w-full text-xs flex items-center justify-center gap-1.5"
                     disabled={editing}
-                    onClick={() => handleRunAutoEdit(slot.id)}
+                    onClick={() => handleRunAutoEdit(slot.id, slot.style_id)}
                   >
                     <Film className="w-3.5 h-3.5" />
                     Auto-Edit This Slot
