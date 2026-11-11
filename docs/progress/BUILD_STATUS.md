@@ -519,5 +519,10 @@ The continuous autonomous build (B0 through B11) of **Affiliate Autopilot** has 
 ### Style Studio Enhancements (`StyleStudio.tsx`):
 - Added **Universal Framing Mode Selector** (`Auto`, `Contain Blur`, `Full Bleed Cover`).
 - Upgraded Subtitle / Caption Layer editor with live color picker, sliders, and drag-to-reposition coordinates.
-- Added visual motion sequence & transition effect badges detailing optical flash hits, whip pans, and gimbal drift.
+- Added visual motion sequence & transition effect badges detailing kinetic beat snaps, directional swishes, and gimbal drift.
 - Rebuilt frontend with Docker and verified preview rendering in ~4.7s on live container stack.
+
+### 9. Elimination of White Flashes & Kinetic Editing Refinements
+- **Zero White Flashes:** Replaced harsh optical white flash overlays with clean kinetic snap zooms (`1.18x -> 1.0x` ease-out), smooth directional whip swishes (horizontal entry without white wash), tactile macro pushes, and overview pull-backs.
+- **Active-Action Sampling (`engine.py`):** Segment planner skips static camera setup pauses by targeting the active 15% to 65% middle of raw footage, cutting straight into hands-on unboxing and demonstration action.
+- **Edge Sharpening & Color Polish (`normalizer.py`):** Added `unsharp=3:3:0.6:3:3:0.0` and `eq=contrast=1.06:saturation=1.12:brightness=0.01` so product edges, ports, buttons, and typography remain razor-sharp.
