@@ -528,6 +528,47 @@ export const SettingsPage: React.FC = () => {
               {passwordLoading ? 'Updating Password...' : 'Save New Password'}
             </Button>
           </form>
+
+          {/* Reset Content & Render Data Card */}
+          <div className="pt-6 border-t border-neutral-200 dark:border-neutral-800 space-y-4">
+            <div className="rounded-card hairline-border border-red-500/30 bg-red-500/5 p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-red-500">Reset Content & Render Data</h3>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                    Safely wipes all generated video posts, daily plan slots, and render queue jobs so you can start fresh.
+                    <br />
+                    <strong className="text-neutral-800 dark:text-neutral-200">Strictly Preserved:</strong> All API keys & secrets (Telegram, Buffer, Cloudinary, Gemini, Drive), settings, imported TikTok products, and synced video clips remain safely intact.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs text-neutral-400">Zero data loss for credentials or Google Drive clips.</span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 text-white border-0 gap-1.5"
+                  onClick={async () => {
+                    if (!confirm('Are you sure you want to reset all content posts and render jobs? All API credentials, Drive connections, and clips will be kept safely intact.')) return;
+                    try {
+                      setLoading(true);
+                      const res = await api.post('/api/settings/reset-data');
+                      setSuccessBanner(res.message || 'Content posts and render jobs reset successfully. Credentials preserved.');
+                    } catch (e: any) {
+                      setErrorBanner('Reset failed: ' + e.message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Reset Content Data
+                </Button>
+              </div>
+            </div>
+          </div>
         </Card>
       )}
       </>

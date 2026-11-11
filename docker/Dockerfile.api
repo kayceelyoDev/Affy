@@ -27,6 +27,9 @@ COPY fonts /app/fonts
 COPY bot /app/bot
 COPY scripts /app/scripts
 COPY docs /app/docs
+COPY legacy_private /app/legacy_private
+COPY .github /app/.github
+COPY LICENSE README.md CONTRIBUTING.md CHANGELOG.md SECURITY.md /app/
 RUN mkdir -p /app/data /data && chown -R appuser:appuser /app /data
 
 USER appuser

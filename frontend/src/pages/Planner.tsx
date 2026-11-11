@@ -42,6 +42,8 @@ export const PlannerPage: React.FC = () => {
   const [dryRunMode, setDryRunMode] = useState(false);
   const [autoApproveMode, setAutoApproveMode] = useState(true);
   const [selectedBatchStyle, setSelectedBatchStyle] = useState<string>("default");
+  const [availableStyles, setAvailableStyles] = useState<{ id: string; name: string }[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<{ id: string; name: string; fixed_music_track: string }[]>([]);
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -58,6 +60,8 @@ export const PlannerPage: React.FC = () => {
 
   useEffect(() => {
     fetchTodayPlan();
+    api.get<any[]>('/api/styles').then((res) => { if (res) setAvailableStyles(res); }).catch(() => {});
+    api.get<any[]>('/api/styles/templates').then((res) => { if (res) setAvailableTemplates(res); }).catch(() => {});
   }, []);
 
   const handleGeneratePlan = async () => {
@@ -352,13 +356,34 @@ export const PlannerPage: React.FC = () => {
                       onChange={(e) => handleUpdateSlotStyle(slot.id, e.target.value)}
                       disabled={isRendering || isRendered || isPosted}
                       className="text-[11px] font-medium rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 px-2 py-0.5 text-neutral-800 dark:text-neutral-200 cursor-pointer focus:outline-none max-w-[150px] truncate"
-                      title="Change style for this specific video"
+                      title="Change style or template for this specific video"
                     >
-                      <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
-                      <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
-                      <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
-                      <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
-                      <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+                      {availableTemplates.length > 0 && (
+                        <optgroup label="Templates (Fixed Audio)">
+                          {availableTemplates.map((t) => (
+                            <option key={t.id} value={t.id} className="bg-neutral-900 text-neutral-100">
+                              {t.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="Universal Motion Styles">
+                        {availableStyles.length > 0 ? (
+                          availableStyles.map((s) => (
+                            <option key={s.id} value={s.id} className="bg-neutral-900 text-neutral-100">
+                              {s.name}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="classic_hook" className="bg-neutral-900 text-neutral-100">Classic Hook</option>
+                            <option value="clean_showcase" className="bg-neutral-900 text-neutral-100">Clean Showcase</option>
+                            <option value="promo_pop" className="bg-neutral-900 text-neutral-100">Promo Pop</option>
+                            <option value="punchy_zoom" className="bg-neutral-900 text-neutral-100">Punchy Zoom</option>
+                            <option value="smooth_flow" className="bg-neutral-900 text-neutral-100">Smooth Flow</option>
+                          </>
+                        )}
+                      </optgroup>
                     </select>
                   </div>
                 </div>

@@ -43,7 +43,7 @@
       "max_size": 130,
       "width_ratio": 0.84,
       "box": false,
-      "animation": "pop_in"
+      "animation": "none"
     },
     {
       "name": "subtitle",
@@ -55,7 +55,7 @@
       "max_size": 115,
       "width_ratio": 0.84,
       "box": false,
-      "animation": "pop_in"
+      "animation": "none"
     },
     {
       "name": "clip_caption",

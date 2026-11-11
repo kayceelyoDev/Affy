@@ -28,6 +28,16 @@ class AutoEditRequest(BaseModel):
     force: bool = False
     style_id: Optional[str] = None  # "classic_hook", "clean_showcase", "promo_pop", "punchy_zoom", "smooth_flow", "random", "default"
 
+class RemixRequest(BaseModel):
+    job_id: Optional[int] = None
+    post_id: Optional[int] = None
+    product_id: Optional[int] = None
+    style_id: Optional[str] = None
+    music_track: Optional[str] = None
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    clip_ids: Optional[List[int]] = None
+
 VALID_BUILTIN_STYLES = [
     "classic_hook",
     "clean_showcase",
@@ -53,12 +63,15 @@ async def resolve_render_style(
 
     # 1. Explicit request style override
     if requested_style and requested_style not in ("default", ""):
-        if requested_style in ("random", "diverse"):
+        clean_req = requested_style.strip().lower()
+        if clean_req in ("random", "diverse"):
             return random.choice(VALID_BUILTIN_STYLES)
+        if clean_req.startswith("tpl_") or clean_req.startswith("template:") or clean_req.startswith("custom_"):
+            return clean_req.replace("template:", "")
         for s in VALID_BUILTIN_STYLES:
-            if s in requested_style.lower():
+            if s == clean_req or s in clean_req:
                 return s
-        return requested_style
+        return clean_req
 
     # Check global default setting in DB
     setting_stmt = select(Setting).where(Setting.key == "DEFAULT_RENDER_STYLE")
@@ -67,18 +80,19 @@ async def resolve_render_style(
 
     # 2. Slot-level custom style (only if explicitly set to a non-default style)
     if slot_style and slot_style not in ("default", "random", "style_1_classic_hook", ""):
-        if slot_style != "classic_hook" or default_setting == "classic_hook":
-            for s in VALID_BUILTIN_STYLES:
-                if s in slot_style.lower():
-                    return s
+        clean_slot = slot_style.strip().lower()
+        if clean_slot.startswith("tpl_") or clean_slot.startswith("template:") or clean_slot.startswith("custom_"):
+            return clean_slot.replace("template:", "")
+        for s in VALID_BUILTIN_STYLES:
+            if s == clean_slot:
+                return s
+        return clean_slot
 
     # 3. Global setting in DB
     if default_setting in ("random", "diverse"):
         return VALID_BUILTIN_STYLES[slot_index % len(VALID_BUILTIN_STYLES)]
-    elif default_setting in VALID_BUILTIN_STYLES:
-        return default_setting
 
-    return "classic_hook"
+    return default_setting.replace("template:", "")
 
 @router.get("")
 async def list_renders(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
@@ -315,3 +329,184 @@ async def stream_rendered_video(job_id: int, db: AsyncSession = Depends(get_db))
     if not job or not job.output_path or not Path(job.output_path).exists():
         raise HTTPException(status_code=404, detail="Rendered video not found")
     return FileResponse(job.output_path, media_type="video/mp4")
+
+@router.post("/remix")
+async def remix_render_endpoint(
+    req: RemixRequest,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Rerenders / remixes a video live with customized style/template, music track, or hooks.
+    Updates the RenderJob and linked Post records with the new output video file.
+    """
+    from backend.app.models.models import Post
+    from backend.app.services.render.templates import get_template_by_id
+
+    job = None
+    post = None
+
+    if req.job_id:
+        job = await db.get(RenderJob, req.job_id)
+        if job:
+            post_stmt = select(Post).where(Post.render_id == job.id)
+            post = (await db.execute(post_stmt)).scalar_one_or_none()
+
+    if not job and req.post_id:
+        post = await db.get(Post, req.post_id)
+        if post and post.render_id:
+            job = await db.get(RenderJob, post.render_id)
+
+    prod_id = req.product_id or (job.product_id if job else (post.product_id if post else None))
+    if not prod_id:
+        raise HTTPException(status_code=400, detail="Cannot remix without a valid product ID")
+
+    prod = await db.get(Product, prod_id)
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # 1. Resolve clips
+    clip_paths = []
+    if req.clip_ids:
+        for cid in req.clip_ids:
+            c = await db.get(Clip, cid)
+            if c:
+                for base in [Path("data"), Path("/app/data")]:
+                    target = base / c.file_path
+                    if target.exists():
+                        clip_paths.append(target)
+                        break
+
+    if not clip_paths:
+        clip_stmt = select(Clip).where(Clip.product_id == prod.id, Clip.status == "usable")
+        clips = (await db.execute(clip_stmt)).scalars().all()
+        for c in clips:
+            for base in [Path("data"), Path("/app/data")]:
+                target = base / c.file_path
+                if target.exists():
+                    clip_paths.append(target)
+                    break
+
+    if not clip_paths:
+        raise HTTPException(status_code=400, detail="No usable video clips found for this product")
+
+    if len(clip_paths) == 1:
+        clip_paths = [clip_paths[0], clip_paths[0]]
+
+    # 2. Resolve style & template
+    chosen_style = req.style_id or (job.style_id if job else (post.style_id if post else "punchy_zoom"))
+    chosen_style = chosen_style.replace("template:", "").strip()
+
+    # 3. Resolve music
+    music_path = None
+    all_music = []
+    for mdir in [Path("data/music"), Path("/app/data/music"), Path("legacy_private/video-editor/music")]:
+        if mdir.exists():
+            all_music.extend(list(mdir.glob("*.mp3")))
+
+    # Check if style is a template with fixed audio
+    tpl = get_template_by_id(chosen_style)
+    if tpl and tpl.get("fixed_music_track"):
+        fixed_name = tpl["fixed_music_track"]
+        for m in all_music:
+            if m.name == fixed_name or m.stem == fixed_name:
+                music_path = m
+                break
+
+    if not music_path and req.music_track:
+        for m in all_music:
+            if m.name == req.music_track or m.stem == req.music_track:
+                music_path = m
+                break
+
+    if not music_path and all_music:
+        music_path = all_music[0]
+
+    # 4. Resolve Title & Subtitle
+    title = req.title or (job.title if job else prod.name)
+    subtitle = req.subtitle if req.subtitle is not None else (job.subtitle if job else "Special Creator Deal")
+
+    # 5. Output path
+    jid = job.id if job else os.urandom(3).hex()
+    out_filename = f"remix_{prod.id}_{jid}_{os.urandom(2).hex()}.mp4"
+    out_dir = Path("data/renders") / datetime.utcnow().strftime("%Y-%m-%d")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / out_filename
+
+    # 6. Render
+    try:
+        render_info = engine.render_video(
+            clip_paths=clip_paths[:6],
+            music_path=music_path,
+            title=title,
+            subtitle=subtitle,
+            style_id=chosen_style,
+            out_path=out_path,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Render remix failed: {str(e)}")
+
+    dur = render_info.get("duration", 5.0)
+
+    # 7. Update Job
+    if not job:
+        job = RenderJob(
+            product_id=prod.id,
+            style_id=chosen_style,
+            title=title,
+            subtitle=subtitle,
+            status="completed",
+            progress_pct=100,
+            duration=dur,
+            output_path=str(out_path),
+            clips_count=len(clip_paths),
+            completed_at=datetime.utcnow(),
+        )
+        db.add(job)
+        await db.flush()
+    else:
+        job.style_id = chosen_style
+        job.title = title
+        job.subtitle = subtitle
+        job.output_path = str(out_path)
+        job.duration = dur
+        job.status = "completed"
+        job.progress_pct = 100
+        job.completed_at = datetime.utcnow()
+        job.error_message = None
+
+    # 8. Update Post
+    if post:
+        post.media_url = str(out_path)
+        post.style_id = chosen_style
+        post.caption = f"{title} - {subtitle}"
+        post.hook_style = subtitle
+        post.render_id = job.id
+    elif req.post_id:
+        new_post = Post(
+            product_id=prod.id,
+            render_id=job.id,
+            caption=f"{title} - {subtitle}",
+            hook_style=subtitle,
+            style_id=chosen_style,
+            media_url=str(out_path),
+            mode="queue",
+            status="ready_to_post",
+        )
+        db.add(new_post)
+        await db.flush()
+        post = new_post
+
+    await db.commit()
+
+    return {
+        "ok": True,
+        "message": "Video successfully remixed and updated",
+        "job_id": job.id,
+        "post_id": post.id if post else None,
+        "preview_url": f"/api/renders/{job.id}/video?v={int(datetime.utcnow().timestamp())}",
+        "duration": dur,
+        "title": title,
+        "subtitle": subtitle,
+        "style_id": chosen_style,
+        "music_track": music_path.name if music_path else "",
+    }

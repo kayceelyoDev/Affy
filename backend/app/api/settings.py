@@ -219,4 +219,131 @@ async def test_connection(
                 "message": f"Google Drive validation failed: {str(e)}",
             }
 
+    elif service == "cloudinary":
+        cloud_name = None
+        api_key = None
+        api_secret = None
+
+        if req_body and req_body.credential:
+            if isinstance(req_body.credential, dict):
+                cloud_name = req_body.credential.get("cloud_name")
+                api_key = req_body.credential.get("api_key")
+                api_secret = req_body.credential.get("api_secret")
+            else:
+                raw_cred = str(req_body.credential).strip()
+                if raw_cred.startswith("cloudinary://"):
+                    import re
+                    m = re.match(r"cloudinary://([^:]+):([^@]+)@(.+)", raw_cred)
+                    if m:
+                        api_key, api_secret, cloud_name = m.groups()
+                elif "{" in raw_cred:
+                    import json
+                    try:
+                        c_dict = json.loads(raw_cred)
+                        cloud_name = c_dict.get("cloud_name")
+                        api_key = c_dict.get("api_key")
+                        api_secret = c_dict.get("api_secret")
+                    except Exception:
+                        pass
+
+        if not cloud_name:
+            cloud_name = await vault_service.get_secret(db, "CLOUDINARY_CLOUD_NAME")
+            if not cloud_name:
+                stmt_cn = select(Setting).where(Setting.key == "CLOUDINARY_CLOUD_NAME")
+                rec_cn = (await db.execute(stmt_cn)).scalar_one_or_none()
+                if rec_cn and rec_cn.value:
+                    cloud_name = rec_cn.value.strip()
+
+        if not api_key:
+            api_key = await vault_service.get_secret(db, "CLOUDINARY_API_KEY")
+        if not api_secret:
+            api_secret = await vault_service.get_secret(db, "CLOUDINARY_API_SECRET")
+
+        if not cloud_name or not api_key or not api_secret:
+            c_url = await vault_service.get_secret(db, "CLOUDINARY_URL")
+            if c_url and c_url.startswith("cloudinary://"):
+                import re
+                m = re.match(r"cloudinary://([^:]+):([^@]+)@(.+)", c_url)
+                if m:
+                    api_key, api_secret, cloud_name = m.groups()
+
+        if not cloud_name or not api_key or not api_secret:
+            return {
+                "ok": False,
+                "service": "cloudinary",
+                "message": "Cloudinary credentials (cloud_name, api_key, api_secret) not configured in vault.",
+            }
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(
+                    f"https://api.cloudinary.com/v1_1/{cloud_name}/ping",
+                    auth=(api_key, api_secret),
+                )
+                if res.status_code == 200:
+                    return {
+                        "ok": True,
+                        "service": "cloudinary",
+                        "message": f"Cloudinary connected successfully (Cloud: {cloud_name})",
+                    }
+                else:
+                    return {
+                        "ok": False,
+                        "service": "cloudinary",
+                        "message": f"HTTP {res.status_code}: {res.text}",
+                    }
+        except Exception as e:
+            return {"ok": False, "service": "cloudinary", "message": f"Connection error: {str(e)}"}
+
     return {"ok": False, "service": service, "message": f"No test harness implemented for service '{service}'."}
+
+@router.post("/reset-data")
+async def reset_catalog_data(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Safely resets generated video catalog content, render jobs, and plan slots.
+    STRICTLY PRESERVES:
+    - SecretVault (all credentials & API keys for Telegram, Buffer, Cloudinary, Gemini, GDrive)
+    - Setting (all configs, folder IDs, default style preferences)
+    - Product & Clip (all imported TikTok product catalogs & Google Drive synced clip metadata)
+    - Track (all music library audio tracks)
+    - User (authentication accounts)
+    """
+    from sqlalchemy import delete
+    from backend.app.models.models import Post, RenderJob, PlanSlot, Plan
+
+    # 1. Clear database rows for posts, renders, and slots
+    await db.execute(delete(Post))
+    await db.execute(delete(RenderJob))
+    await db.execute(delete(PlanSlot))
+    await db.execute(delete(Plan))
+
+    # Audit log
+    audit = AuditLog(
+        action="CONTENT_DATA_RESET",
+        actor=current_user.username,
+        details_json='{"status": "success", "preserved": "credentials, settings, products, clips, tracks"}',
+    )
+    db.add(audit)
+    await db.commit()
+
+    # 2. Clean temporary preview and render video files from disk
+    from pathlib import Path
+    cleared_files = 0
+    for pdir in [Path("data/previews"), Path("/app/data/previews"), Path("data/renders"), Path("/app/data/renders")]:
+        if pdir.exists():
+            for f in pdir.rglob("*.mp4"):
+                try:
+                    f.unlink()
+                    cleared_files += 1
+                except Exception:
+                    pass
+
+    return {
+        "ok": True,
+        "message": "Content posts and render jobs successfully reset. All API keys, drive connections, products, and clips remain securely preserved.",
+        "cleared_temp_videos": cleared_files,
+    }

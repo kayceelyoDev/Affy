@@ -13,6 +13,7 @@ from backend.app.core.config import settings
 from backend.app.core.database import AsyncSessionLocal
 from backend.app.models.models import RenderJob, PlanSlot, Product, Clip, Track
 from backend.app.services.render.engine import RenderEngine
+from backend.app.services.render.templates import get_template_by_id
 
 logger = structlog.get_logger("worker")
 
@@ -65,13 +66,22 @@ class RenderWorker:
             await db.commit()
             return
 
-        # 3. Gather music track
-        track_stmt = select(Track).where(Track.safe_to_use == True).order_by(Track.id.desc()).limit(1)
-        track = (await db.execute(track_stmt)).scalars().first()
-        
+        # 3. Gather music track (check fixed template audio first if template is used)
         music_path = None
-        if track and Path(track.storage_path).exists():
-            music_path = Path(track.storage_path)
+        tpl = get_template_by_id(job.style_id)
+        if tpl and tpl.get("fixed_music_track"):
+            fixed_track = tpl["fixed_music_track"]
+            for mdir in [settings.DATA_DIR / "music", Path("data/music"), Path("/app/data/music"), Path("legacy_private/video-editor/music")]:
+                candidate = mdir / fixed_track
+                if candidate.exists():
+                    music_path = candidate
+                    break
+
+        if not music_path:
+            track_stmt = select(Track).where(Track.safe_to_use == True).order_by(Track.id.desc()).limit(1)
+            track = (await db.execute(track_stmt)).scalars().first()
+            if track and Path(track.storage_path).exists():
+                music_path = Path(track.storage_path)
         else:
             # Check data/music or legacy music
             data_music = list((settings.DATA_DIR / "music").glob("*.mp3")) + list(Path("data/music").glob("*.mp3"))

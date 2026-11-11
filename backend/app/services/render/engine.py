@@ -13,6 +13,7 @@ from backend.app.services.render.spec import StyleSpec
 from backend.app.services.render.normalizer import probe_clip, build_clip_filters, BadClip
 from backend.app.services.render.beat import analyse_beats, plan_cuts
 from backend.app.services.render.compiler import compile_text_filters
+from backend.app.services.render.templates import get_template_by_id
 
 logger = structlog.get_logger("render_engine")
 
@@ -25,17 +26,47 @@ class RenderEngine:
         if style_id in self._styles_cache:
             return self._styles_cache[style_id]
 
-        clean_id = style_id.lower()
-        if "classic" in clean_id:
-            clean_id = "classic_hook"
-        elif "showcase" in clean_id or "clean" in clean_id:
-            clean_id = "clean_showcase"
-        elif "promo" in clean_id or "pop" in clean_id:
-            clean_id = "promo_pop"
-        elif "zoom" in clean_id or "punch" in clean_id:
-            clean_id = "punchy_zoom"
-        elif "flow" in clean_id or "smooth" in clean_id:
-            clean_id = "smooth_flow"
+        clean_id = style_id.lower().replace("template:", "").strip()
+        if clean_id in self._styles_cache:
+            return self._styles_cache[clean_id]
+
+        # 1. Check if style_id refers to a Template
+        tpl = get_template_by_id(clean_id)
+        if tpl:
+            base_style_id = tpl.get("base_style_id", "punchy_zoom")
+            base_spec = self.get_style(base_style_id).model_copy(deep=True)
+            base_spec.id = clean_id
+            base_spec.name = tpl.get("name", clean_id)
+            if "crop_mode" in tpl:
+                base_spec.clip_rules.crop_mode = tpl["crop_mode"]
+
+            for layer in base_spec.text_layers:
+                lname = layer.name.lower()
+                if lname == "title":
+                    layer.color = tpl.get("title_color", layer.color)
+                    layer.max_size = tpl.get("title_font_size", layer.max_size)
+                    layer.position_y = tpl.get("title_y", layer.position_y)
+                elif lname == "subtitle":
+                    layer.color = tpl.get("subtitle_color", layer.color)
+                    layer.max_size = tpl.get("subtitle_font_size", layer.max_size)
+                    layer.position_y = tpl.get("subtitle_y", layer.position_y)
+
+            self._styles_cache[style_id] = base_spec
+            self._styles_cache[clean_id] = base_spec
+            return base_spec
+
+        # 2. Check built-in keyword aliases
+        if clean_id not in ("classic_hook", "clean_showcase", "promo_pop", "punchy_zoom", "smooth_flow"):
+            if "classic" in clean_id:
+                clean_id = "classic_hook"
+            elif "showcase" in clean_id or "clean" in clean_id:
+                clean_id = "clean_showcase"
+            elif "promo" in clean_id or "pop" in clean_id:
+                clean_id = "promo_pop"
+            elif "zoom" in clean_id or "punch" in clean_id:
+                clean_id = "punchy_zoom"
+            elif "flow" in clean_id or "smooth" in clean_id:
+                clean_id = "smooth_flow"
 
         if clean_id in self._styles_cache:
             return self._styles_cache[clean_id]
@@ -196,6 +227,16 @@ class RenderEngine:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         spec = self.get_style(style_id)
 
+        # 0. Resolve fixed audio if using a Template
+        tpl = get_template_by_id(style_id)
+        if tpl and tpl.get("fixed_music_track"):
+            fixed_file = tpl["fixed_music_track"]
+            for mdir in [Path("data/music"), Path("/app/data/music"), Path("backend/data/music"), Path("legacy_private/video-editor/music")]:
+                candidate = mdir / fixed_file
+                if candidate.exists():
+                    music_path = candidate
+                    break
+
         min_dur = min_duration or spec.clip_rules.min_duration
         max_dur = max_duration or spec.clip_rules.max_duration
 
@@ -245,7 +286,7 @@ class RenderEngine:
                                 clip=clip,
                                 start=start,
                                 n_frames=n,
-                                text_filter=text_filter,
+                                text_filter="",  # Pure video motion and cuts without embedded per-segment text
                                 out_path=seg,
                                 spec=spec,
                                 seg_idx=idx,
@@ -257,13 +298,27 @@ class RenderEngine:
                     total_dur = sum(seg_frames) / fps
                     fade_start = max(0.0, total_dur - spec.audio.fade_out_sec)
 
+                    # Continuous video overlay: text burns across the full joined video stream,
+                    # ensuring typography stays 100% rock-solid and persistent across clip cuts
                     mux_cmd = [
                         "ffmpeg", "-y", "-v", "error", "-framerate", str(fps), "-f", "h264", "-i", str(joined),
                         "-ss", f"{t0:.3f}", "-t", f"{total_dur:.3f}", "-i", str(music_path),
-                        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                    ]
+                    if text_filter:
+                        mux_cmd.extend([
+                            "-vf", text_filter,
+                            "-c:v", "libx264", "-preset", spec.canvas.preset, "-crf", str(spec.canvas.crf),
+                            "-profile:v", "high", "-level", "4.1",
+                            "-pix_fmt", spec.canvas.pixel_format,
+                            "-x264-params", f"open-gop=0:keyint={spec.canvas.fps * 2}:min-keyint={spec.canvas.fps * 2}:scenecut=0",
+                        ])
+                    else:
+                        mux_cmd.extend(["-c:v", "copy"])
+
+                    mux_cmd.extend([
                         "-af", f"loudnorm=I={spec.audio.target_lufs}:TP=-1.5:LRA=11,afade=t=out:st={fade_start:.3f}:d={spec.audio.fade_out_sec:.3f}",
                         "-c:a", "aac", "-b:a", "192k", "-t", f"{total_dur:.3f}", "-movflags", "+faststart", str(out_path)
-                    ]
+                    ])
                     subprocess.run(mux_cmd, check=True)
 
                 expected_frames = sum(seg_frames)

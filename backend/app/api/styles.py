@@ -16,6 +16,13 @@ from backend.app.core.database import AsyncSessionLocal
 from backend.app.models.models import Product, Clip, Setting
 from backend.app.services.render.spec import StyleSpec
 from backend.app.services.render.engine import RenderEngine
+from backend.app.services.render.templates import (
+    TemplateSpec,
+    list_all_templates,
+    get_template_by_id,
+    save_template_spec,
+    delete_template_by_id,
+)
 
 router = APIRouter(prefix="/api/styles", tags=["Styles (Style Studio)"])
 engine = RenderEngine()
@@ -35,6 +42,34 @@ class PreviewRequest(BaseModel):
 class CreateCustomStyleRequest(BaseModel):
     name: str
     base_style_id: str = "classic_hook"
+
+class TemplateCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    fixed_music_track: str
+    base_style_id: str = "punchy_zoom"
+    crop_mode: str = "auto"
+    title_color: str = "#EFD34C"
+    title_font_size: int = 130
+    title_y: int = 240
+    subtitle_color: str = "#FFFFFF"
+    subtitle_font_size: int = 60
+    subtitle_y: int = 380
+    target_duration: float = 6.0
+
+class TemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    fixed_music_track: Optional[str] = None
+    base_style_id: Optional[str] = None
+    crop_mode: Optional[str] = None
+    title_color: Optional[str] = None
+    title_font_size: Optional[int] = None
+    title_y: Optional[int] = None
+    subtitle_color: Optional[str] = None
+    subtitle_font_size: Optional[int] = None
+    subtitle_y: Optional[int] = None
+    target_duration: Optional[float] = None
 
 class UpdateStyleRequest(BaseModel):
     name: Optional[str] = None
@@ -63,6 +98,92 @@ async def list_music_tracks() -> List[Dict[str, Any]]:
                         "size_kb": round(f.stat().st_size / 1024, 1),
                     })
     return music_files
+
+@router.get("/templates")
+async def list_templates_endpoint() -> List[Dict[str, Any]]:
+    """Returns all CapCut-style templates with fixed audio and preset layout."""
+    default_style = "classic_hook"
+    async with AsyncSessionLocal() as db:
+        setting_stmt = select(Setting).where(Setting.key == "DEFAULT_RENDER_STYLE")
+        setting_rec = (await db.execute(setting_stmt)).scalar_one_or_none()
+        if setting_rec and setting_rec.value:
+            default_style = setting_rec.value.strip().lower()
+
+    tpls = list_all_templates()
+    res = []
+    for t in tpls:
+        tid = t.get("id", "")
+        t_copy = dict(t)
+        t_copy["is_default"] = (tid == default_style or f"template:{tid}" == default_style)
+        res.append(t_copy)
+    return res
+
+@router.post("/templates")
+async def create_template_endpoint(req: TemplateCreateRequest) -> Dict[str, Any]:
+    """Creates a new user template with fixed audio and layout."""
+    slug = re.sub(r'[^a-zA-Z0-9_]', '_', req.name.lower().strip())
+    tid = f"tpl_{slug}_{os.urandom(2).hex()}"
+    data = req.model_dump()
+    data["id"] = tid
+    data["is_custom"] = True
+    saved = save_template_spec(data)
+    return {"ok": True, "message": f"Template '{req.name}' created successfully", "template": saved}
+
+@router.get("/templates/{template_id}")
+async def get_template_endpoint(template_id: str) -> Dict[str, Any]:
+    tpl = get_template_by_id(template_id)
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return tpl
+
+@router.put("/templates/{template_id}")
+async def update_template_endpoint(template_id: str, req: TemplateUpdateRequest) -> Dict[str, Any]:
+    tpl = get_template_by_id(template_id)
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    updates = req.model_dump(exclude_unset=True)
+    tpl.update(updates)
+    tpl["id"] = template_id
+    saved = save_template_spec(tpl)
+    return {"ok": True, "message": f"Template '{template_id}' updated", "template": saved}
+
+@router.delete("/templates/{template_id}")
+async def delete_template_endpoint(template_id: str) -> Dict[str, Any]:
+    deleted = delete_template_by_id(template_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Template not found or cannot be deleted")
+    return {"ok": True, "message": f"Template '{template_id}' deleted"}
+
+@router.post("/templates/{template_id}/set-default")
+async def set_default_template_endpoint(template_id: str) -> Dict[str, Any]:
+    """Sets this template as the default style in Setting."""
+    clean_id = template_id.replace("template:", "").strip()
+    async with AsyncSessionLocal() as db:
+        stmt = select(Setting).where(Setting.key == "DEFAULT_RENDER_STYLE")
+        rec = (await db.execute(stmt)).scalar_one_or_none()
+        if rec:
+            rec.value = clean_id
+        else:
+            rec = Setting(key="DEFAULT_RENDER_STYLE", value=clean_id, description="Default render style", is_secret=False)
+            db.add(rec)
+
+        from datetime import datetime
+        from backend.app.models.models import Plan, PlanSlot
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        plan_stmt = select(Plan).where(Plan.date == today_str)
+        plan = (await db.execute(plan_stmt)).scalars().first()
+        if plan:
+            slots_stmt = select(PlanSlot).where(PlanSlot.plan_id == plan.id)
+            slots = (await db.execute(slots_stmt)).scalars().all()
+            for s in slots:
+                if s.status not in ("posted", "published"):
+                    s.style_id = clean_id
+                    s.render_id = None
+                    s.status = "pending"
+
+        await db.commit()
+    return {"ok": True, "template_id": clean_id, "message": f"Default template set to {clean_id}"}
 
 @router.get("")
 async def list_styles() -> List[Dict[str, Any]]:
@@ -286,7 +407,16 @@ async def render_preview(req: PreviewRequest) -> Dict[str, Any]:
         if mdir.exists():
             all_music.extend(list(mdir.glob("*.mp3")))
 
-    if req.music_track and req.music_track != "random":
+    # Check if style_id is a template with locked fixed audio
+    tpl = get_template_by_id(req.style_id)
+    if tpl and tpl.get("fixed_music_track"):
+        fixed_name = tpl["fixed_music_track"]
+        for m in all_music:
+            if m.name == fixed_name or m.stem == fixed_name:
+                music_path = m
+                break
+
+    if not music_path and req.music_track and req.music_track != "random":
         for m in all_music:
             if m.name == req.music_track or m.stem == req.music_track:
                 music_path = m

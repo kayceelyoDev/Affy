@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button, Card, Input, Badge } from '../components/ui';
 import {
   Play,
-  Copy,
   Sliders,
   Video,
   Check,
@@ -14,8 +13,11 @@ import {
   Save,
   Plus,
   Trash2,
-  Move,
   X,
+  Sparkles,
+  Film,
+  Lock,
+  Layers,
 } from 'lucide-react';
 import { api } from '../api/client';
 
@@ -58,6 +60,24 @@ interface StyleSpecData {
   };
 }
 
+interface TemplateData {
+  id: string;
+  name: string;
+  description?: string;
+  fixed_music_track: string;
+  base_style_id: string;
+  crop_mode: string;
+  title_color: string;
+  title_font_size: number;
+  title_y: number;
+  subtitle_color: string;
+  subtitle_font_size: number;
+  subtitle_y: number;
+  target_duration: number;
+  is_default?: boolean;
+  is_custom?: boolean;
+}
+
 interface ProductItem {
   id: number;
   name: string;
@@ -83,47 +103,72 @@ const PRESET_COLORS = [
 ];
 
 export const StyleStudioPage: React.FC = () => {
+  // Main Studio Mode Switcher: Templates vs Universal Styles
+  const [studioMode, setStudioMode] = useState<'templates' | 'styles'>('templates');
+
+  // Templates State
+  const [templates, setTemplates] = useState<TemplateData[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateData | null>(null);
+  const [showNewTemplateModal, setShowNewTemplateModal] = useState(false);
+  const [newTplName, setNewTplName] = useState('');
+  const [newTplMusic, setNewTplMusic] = useState('downloadsv2 (1).mp3');
+  const [newTplBase, setNewTplBase] = useState('punchy_zoom');
+  const [newTplCrop, setNewTplCrop] = useState('auto');
+
+  // Styles State
   const [styles, setStyles] = useState<StyleSpecData[]>([]);
   const [selectedStyle, setSelectedStyle] = useState<StyleSpecData | null>(null);
+  const [showNewStyleModal, setShowNewStyleModal] = useState(false);
+  const [newStyleName, setNewStyleName] = useState('');
+  const [newStyleBase, setNewStyleBase] = useState('punchy_zoom');
+
+  // Shared Data
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [musicTracks, setMusicTracks] = useState<MusicTrackItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<string>('random');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [settingDefaultLoading, setSettingDefaultLoading] = useState(false);
-  const [savingStyleLoading, setSavingStyleLoading] = useState(false);
+  const [savingLoading, setSavingLoading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [titleText, setTitleText] = useState('ATTACK SHARK X11');
   const [subtitleText, setSubtitleText] = useState('VIRAL WIRELESS GAMING MOUSE');
   const [actionAlert, setActionAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // New Custom Style Modal
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newStyleName, setNewStyleName] = useState('');
-  const [newStyleBase, setNewStyleBase] = useState('punchy_zoom');
-
-  // Dragging state in phone canvas
+  // Phone Canvas Dragging State
   const phoneCanvasRef = useRef<HTMLDivElement>(null);
   const [draggingLayer, setDraggingLayer] = useState<string | null>(null);
 
   useEffect(() => {
+    fetchTemplates();
     fetchStyles();
     fetchProducts();
     fetchMusicTracks();
   }, []);
+
+  const fetchTemplates = async () => {
+    try {
+      const data = await api.get<TemplateData[]>('/api/styles/templates');
+      const list = data || [];
+      setTemplates(list);
+      if (list.length > 0 && !selectedTemplate) {
+        const def = list.find((t) => t.is_default) || list[0];
+        setSelectedTemplate(def);
+      }
+    } catch (err) {
+      console.error('Failed to load templates', err);
+    }
+  };
 
   const fetchStyles = async () => {
     try {
       const data = await api.get<StyleSpecData[]>('/api/styles');
       const list = data || [];
       setStyles(list);
-      if (list.length > 0) {
+      if (list.length > 0 && !selectedStyle) {
         const def = list.find((s) => s.is_default) || list[0];
-        setSelectedStyle((prev) => {
-          if (!prev) return def;
-          return list.find((s) => s.id === prev.id) || def;
-        });
+        setSelectedStyle(def);
       }
     } catch (err) {
       console.error('Failed to load styles', err);
@@ -150,6 +195,9 @@ export const StyleStudioPage: React.FC = () => {
       const tracks = await api.get<MusicTrackItem[]>('/api/styles/music-tracks');
       if (tracks) {
         setMusicTracks(tracks);
+        if (tracks.length > 0) {
+          setNewTplMusic(tracks[0].filename);
+        }
       }
     } catch (err) {
       console.error('Failed to load music tracks', err);
@@ -166,14 +214,143 @@ export const StyleStudioPage: React.FC = () => {
     }
   };
 
+  const handleSelectTemplate = (tpl: TemplateData) => {
+    setSelectedTemplate(tpl);
+    setHasUnsavedChanges(false);
+    setPreviewUrl(null);
+  };
+
   const handleSelectStyle = (s: StyleSpecData) => {
     setSelectedStyle(s);
     setHasUnsavedChanges(false);
     setPreviewUrl(null);
   };
 
-  // Update a text layer property in current style spec
-  const handleUpdateLayer = (layerName: string, updates: Partial<TextLayerConfig>) => {
+  // Convert color to standard hex format for HTML display
+  const normalizeHexColor = (colorStr?: string) => {
+    if (!colorStr) return '#FFFFFF';
+    if (colorStr.startsWith('0x')) return '#' + colorStr.slice(2);
+    if (colorStr.startsWith('#')) return colorStr;
+    if (colorStr.toLowerCase() === 'white') return '#FFFFFF';
+    if (colorStr.toLowerCase() === 'black') return '#000000';
+    if (colorStr.toLowerCase() === 'yellow') return '#EFD34C';
+    if (colorStr.toLowerCase() === 'red') return '#FF3B30';
+    return colorStr;
+  };
+
+  // Convert hex color back to FFmpeg format
+  const formatColorForFFmpeg = (hex: string) => {
+    if (hex.startsWith('#')) {
+      return '0x' + hex.slice(1).toUpperCase();
+    }
+    return hex;
+  };
+
+  // ------------------ TEMPLATE ACTIONS ------------------
+
+  const handleUpdateTemplateProperty = (field: keyof TemplateData, val: any) => {
+    if (!selectedTemplate) return;
+    setSelectedTemplate((prev) => (prev ? { ...prev, [field]: val } : null));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!selectedTemplate) return;
+    setSavingLoading(true);
+    try {
+      await api.put(`/api/styles/templates/${selectedTemplate.id}`, selectedTemplate);
+      setHasUnsavedChanges(false);
+      setActionAlert({
+        type: 'success',
+        message: `Template "${selectedTemplate.name}" saved successfully. All future renders using this template will apply these settings.`,
+      });
+      await fetchTemplates();
+    } catch (err: any) {
+      setActionAlert({
+        type: 'error',
+        message: 'Failed to save template: ' + (err.message || 'Unknown error'),
+      });
+    } finally {
+      setSavingLoading(false);
+    }
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!newTplName.trim()) return;
+    try {
+      const res = await api.post('/api/styles/templates', {
+        name: newTplName.trim(),
+        fixed_music_track: newTplMusic,
+        base_style_id: newTplBase,
+        crop_mode: newTplCrop,
+        title_color: '#EFD34C',
+        title_font_size: 130,
+        title_y: 240,
+        subtitle_color: '#FFFFFF',
+        subtitle_font_size: 60,
+        subtitle_y: 380,
+      });
+      await fetchTemplates();
+      if (res && res.template) {
+        setSelectedTemplate(res.template);
+      }
+      setShowNewTemplateModal(false);
+      setNewTplName('');
+      setActionAlert({
+        type: 'success',
+        message: `Template "${res.template?.name || newTplName}" created! You can now customize colors and typography.`,
+      });
+    } catch (err: any) {
+      setActionAlert({
+        type: 'error',
+        message: 'Failed to create template: ' + (err.message || 'Unknown error'),
+      });
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string, name: string) => {
+    if (!confirm(`Delete template "${name}"?`)) return;
+    try {
+      await api.delete(`/api/styles/templates/${id}`);
+      await fetchTemplates();
+      setActionAlert({ type: 'success', message: `Template "${name}" deleted.` });
+    } catch (err: any) {
+      setActionAlert({
+        type: 'error',
+        message: 'Delete failed: ' + (err.message || 'Cannot delete default template'),
+      });
+    }
+  };
+
+  const handleSetDefaultTemplate = async () => {
+    if (!selectedTemplate) return;
+    setSettingDefaultLoading(true);
+    try {
+      await api.post(`/api/styles/templates/${selectedTemplate.id}/set-default`);
+      setTemplates((prev) =>
+        prev.map((t) => ({
+          ...t,
+          is_default: t.id === selectedTemplate.id,
+        }))
+      );
+      setSelectedTemplate((prev) => (prev ? { ...prev, is_default: true } : null));
+      setActionAlert({
+        type: 'success',
+        message: `Template "${selectedTemplate.name}" is now the global default for all video renders.`,
+      });
+    } catch (err: any) {
+      setActionAlert({
+        type: 'error',
+        message: 'Failed to set default template: ' + (err.message || 'Unknown error'),
+      });
+    } finally {
+      setSettingDefaultLoading(false);
+    }
+  };
+
+  // ------------------ UNIVERSAL STYLE ACTIONS ------------------
+
+  const handleUpdateStyleLayer = (layerName: string, updates: Partial<TextLayerConfig>) => {
     if (!selectedStyle) return;
     const currentLayers = selectedStyle.spec?.text_layers || [];
     const exists = currentLayers.some((l) => l.name === layerName);
@@ -217,6 +394,10 @@ export const StyleStudioPage: React.FC = () => {
   };
 
   const handleCropModeChange = (mode: string) => {
+    if (studioMode === 'templates' && selectedTemplate) {
+      handleUpdateTemplateProperty('crop_mode', mode);
+      return;
+    }
     if (!selectedStyle) return;
     const updatedStyle: StyleSpecData = {
       ...selectedStyle,
@@ -233,30 +414,9 @@ export const StyleStudioPage: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
-  // Convert color to standard hex format for HTML display
-  const normalizeHexColor = (colorStr?: string) => {
-    if (!colorStr) return '#FFFFFF';
-    if (colorStr.startsWith('0x')) return '#' + colorStr.slice(2);
-    if (colorStr.startsWith('#')) return colorStr;
-    if (colorStr.toLowerCase() === 'white') return '#FFFFFF';
-    if (colorStr.toLowerCase() === 'black') return '#000000';
-    if (colorStr.toLowerCase() === 'yellow') return '#EFD34C';
-    if (colorStr.toLowerCase() === 'red') return '#FF3B30';
-    return colorStr;
-  };
-
-  // Convert hex color back to FFmpeg format (e.g. 0xEFD34C for yellow or #FFFFFF)
-  const formatColorForFFmpeg = (hex: string) => {
-    if (hex.startsWith('#')) {
-      return '0x' + hex.slice(1).toUpperCase();
-    }
-    return hex;
-  };
-
-  // Save current style customizations to backend
   const handleSaveStyle = async () => {
     if (!selectedStyle) return;
-    setSavingStyleLoading(true);
+    setSavingLoading(true);
     try {
       await api.put(`/api/styles/${selectedStyle.id}`, {
         spec: selectedStyle.spec,
@@ -264,7 +424,7 @@ export const StyleStudioPage: React.FC = () => {
       setHasUnsavedChanges(false);
       setActionAlert({
         type: 'success',
-        message: `Style "${selectedStyle.name}" updated successfully. All future renders will use your custom colors and positions.`,
+        message: `Style "${selectedStyle.name}" updated successfully.`,
       });
       await fetchStyles();
     } catch (err: any) {
@@ -273,14 +433,13 @@ export const StyleStudioPage: React.FC = () => {
         message: 'Failed to save style: ' + (err.message || 'Unknown error'),
       });
     } finally {
-      setSavingStyleLoading(false);
+      setSavingLoading(false);
     }
   };
 
-  // Reset style to factory default
   const handleResetStyle = async () => {
     if (!selectedStyle) return;
-    if (!confirm(`Reset "${selectedStyle.name}" back to factory default template values?`)) return;
+    if (!confirm(`Reset "${selectedStyle.name}" back to factory default values?`)) return;
     try {
       await api.post(`/api/styles/${selectedStyle.id}/reset`);
       await fetchStyles();
@@ -298,7 +457,6 @@ export const StyleStudioPage: React.FC = () => {
     }
   };
 
-  // Create new custom style
   const handleCreateCustomStyle = async () => {
     if (!newStyleName.trim()) return;
     try {
@@ -307,11 +465,11 @@ export const StyleStudioPage: React.FC = () => {
         base_style_id: newStyleBase,
       });
       await fetchStyles();
-      setShowNewModal(false);
+      setShowNewStyleModal(false);
       setNewStyleName('');
       setActionAlert({
         type: 'success',
-        message: `Custom style "${res.name}" created! You can now adjust colors, fonts, and positions.`,
+        message: `Custom style "${res.name}" created!`,
       });
     } catch (err: any) {
       setActionAlert({
@@ -321,7 +479,6 @@ export const StyleStudioPage: React.FC = () => {
     }
   };
 
-  // Delete custom style
   const handleDeleteCustomStyle = async (id: string, name: string) => {
     if (!confirm(`Delete custom style "${name}"?`)) return;
     try {
@@ -329,7 +486,10 @@ export const StyleStudioPage: React.FC = () => {
       await fetchStyles();
       setActionAlert({ type: 'success', message: `Custom style "${name}" deleted.` });
     } catch (err: any) {
-      setActionAlert({ type: 'error', message: 'Delete failed: ' + (err.message || 'Cannot delete built-in style') });
+      setActionAlert({
+        type: 'error',
+        message: 'Delete failed: ' + (err.message || 'Cannot delete built-in style'),
+      });
     }
   };
 
@@ -359,29 +519,24 @@ export const StyleStudioPage: React.FC = () => {
     }
   };
 
-  const handleDuplicate = async (id: string) => {
-    try {
-      await api.post(`/api/styles/${id}/duplicate`);
-      await fetchStyles();
-      setActionAlert({ type: 'success', message: 'Style duplicated successfully.' });
-    } catch (err: any) {
-      setActionAlert({ type: 'error', message: 'Duplicate failed: ' + (err.message || 'Unknown error') });
-    }
-  };
+  // ------------------ PREVIEW RENDER ------------------
 
   const handlePreviewRender = async () => {
-    if (!selectedStyle) return;
+    const targetId = studioMode === 'templates' ? selectedTemplate?.id : selectedStyle?.id;
+    if (!targetId) return;
+
     try {
       setPreviewLoading(true);
       setActionAlert(null);
       const data = await api.post('/api/styles/preview', {
-        style_id: selectedStyle.id,
+        style_id: targetId,
         product_id: selectedProductId,
-        music_track: selectedMusicTrack,
+        music_track: studioMode === 'templates' ? undefined : selectedMusicTrack,
         title: titleText,
         subtitle: subtitleText,
         sample_duration: 6.0,
       });
+
       if (data && data.preview_url) {
         setPreviewUrl(data.preview_url);
         setActionAlert({
@@ -399,88 +554,119 @@ export const StyleStudioPage: React.FC = () => {
     }
   };
 
-  // Handle Drag on Phone Mockup Canvas to reposition text Y coordinate
-  const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (!draggingLayer || !phoneCanvasRef.current || !selectedStyle) return;
-    const rect = phoneCanvasRef.current.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
-    // Map phone mockup height (498px) to 1920px video canvas
-    const rawY = Math.round((offsetY / rect.height) * 1920);
-    const clampedY = Math.max(120, Math.min(1720, rawY));
-    handleUpdateLayer(draggingLayer, { position_y: clampedY });
+  // ------------------ PHONE CANVAS DRAGGING ------------------
+
+  const handleMouseDown = (layer: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setDraggingLayer(layer);
   };
 
-  const handleCanvasMouseUp = () => {
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggingLayer || !phoneCanvasRef.current) return;
+    const rect = phoneCanvasRef.current.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const clampedY = Math.max(10, Math.min(rect.height - 30, offsetY));
+    const normalizedY = Math.round((clampedY / rect.height) * 1920);
+
+    if (studioMode === 'templates' && selectedTemplate) {
+      if (draggingLayer === 'title') {
+        handleUpdateTemplateProperty('title_y', normalizedY);
+      } else if (draggingLayer === 'subtitle') {
+        handleUpdateTemplateProperty('subtitle_y', normalizedY);
+      }
+    } else if (selectedStyle) {
+      handleUpdateStyleLayer(draggingLayer, { position_y: normalizedY });
+    }
+  };
+
+  const handleMouseUp = () => {
     setDraggingLayer(null);
   };
 
-  const titleLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'title');
-  const subtitleLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'subtitle');
-  const captionLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'clip_caption');
-  const ctaLayer = selectedStyle?.spec?.text_layers?.find((l) => l.name === 'cta');
-  const secondaryLayer = subtitleLayer || captionLayer;
-  const secondaryLayerName = subtitleLayer ? 'subtitle' : (captionLayer ? 'clip_caption' : 'subtitle');
+  // Active layer getters
+  const activeTitleColor =
+    studioMode === 'templates'
+      ? selectedTemplate?.title_color || '#EFD34C'
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'title')?.color || '#EFD34C';
+
+  const activeSubtitleColor =
+    studioMode === 'templates'
+      ? selectedTemplate?.subtitle_color || '#FFFFFF'
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'subtitle')?.color || '#FFFFFF';
+
+  const activeTitleY =
+    studioMode === 'templates'
+      ? selectedTemplate?.title_y || 240
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'title')?.position_y || 230;
+
+  const activeSubtitleY =
+    studioMode === 'templates'
+      ? selectedTemplate?.subtitle_y || 380
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'subtitle')?.position_y || 380;
+
+  const activeTitleSize =
+    studioMode === 'templates'
+      ? selectedTemplate?.title_font_size || 130
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'title')?.max_size || 125;
+
+  const activeSubtitleSize =
+    studioMode === 'templates'
+      ? selectedTemplate?.subtitle_font_size || 60
+      : selectedStyle?.spec?.text_layers?.find((l) => l.name === 'subtitle')?.max_size || 80;
+
+  const activeCropMode =
+    studioMode === 'templates'
+      ? selectedTemplate?.crop_mode || 'auto'
+      : selectedStyle?.crop_mode || 'cover';
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border pb-5">
+    <div className="max-w-7xl mx-auto space-y-6 pb-16" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
+      {/* Studio Header & Top Mode Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <Sliders className="h-6 w-6" /> Style Studio
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 flex items-center gap-2">
+            <Sliders className="w-6 h-6" />
+            Style Studio & Template Engine
           </h1>
-          <p className="text-sm text-neutral-500 mt-1">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
             Build, customize colors, drag typography, and preview real-time TikTok styles with beat-cutting and motion effects.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowNewModal(true)}
-            className="text-xs"
+
+        {/* Tab Switcher: Templates vs Universal Styles */}
+        <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-neutral-900 p-1 rounded-control border border-neutral-200 dark:border-neutral-800 shadow-sm">
+          <button
+            onClick={() => {
+              setStudioMode('templates');
+              setPreviewUrl(null);
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-control text-xs font-semibold uppercase tracking-wider transition-all ${
+              studioMode === 'templates'
+                ? 'bg-neutral-900 text-white dark:bg-white dark:text-black shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+            }`}
           >
-            <Plus className="h-3.5 w-3.5 mr-1" /> New Custom Style
-          </Button>
-
-          {selectedStyle && (
-            selectedStyle.is_default ? (
-              <Badge variant="default" className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 px-3 py-1.5 text-xs flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5" /> Active Default Style
-              </Badge>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSetDefaultStyle}
-                disabled={settingDefaultLoading}
-                className="text-xs"
-              >
-                <Check className="h-3.5 w-3.5 mr-1 text-neutral-400" />
-                Set as Default Style
-              </Button>
-            )
-          )}
-
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSaveStyle}
-            disabled={savingStyleLoading || !hasUnsavedChanges}
-            className={`text-xs gap-1.5 ${hasUnsavedChanges ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}`}
+            <Sparkles className="w-3.5 h-3.5" />
+            CapCut-Style Templates ({templates.length})
+          </button>
+          <button
+            onClick={() => {
+              setStudioMode('styles');
+              setPreviewUrl(null);
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-control text-xs font-semibold uppercase tracking-wider transition-all ${
+              studioMode === 'styles'
+                ? 'bg-neutral-900 text-white dark:bg-white dark:text-black shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+            }`}
           >
-            <Save className="h-3.5 w-3.5" />
-            {savingStyleLoading ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Saved'}
-          </Button>
-
-          <Button variant="primary" size="sm" onClick={handlePreviewRender} disabled={previewLoading}>
-            <Play className="h-4 w-4 mr-1.5" />
-            {previewLoading ? 'Rendering 5s Preview...' : 'Preview Render'}
-          </Button>
+            <Layers className="w-3.5 h-3.5" />
+            Universal Motion Styles ({styles.length})
+          </button>
         </div>
       </div>
 
-      {/* Notification banner */}
+      {/* Alert Notification */}
       {actionAlert && (
         <div
           className={`rounded-card p-3.5 text-xs flex items-center justify-between hairline-border ${
@@ -503,621 +689,802 @@ export const StyleStudioPage: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Style Selector, Asset Source & Visual Customizer */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Style Selector Tabs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {styles.map((s) => {
-              const isSelected = selectedStyle?.id === s.id;
+      {/* ===================== MODE 1: CAPCUT-STYLE TEMPLATES ===================== */}
+      {studioMode === 'templates' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                Templates (Locked Audio & Preset Layouts)
+              </span>
+              <p className="text-xs text-neutral-400">
+                Pre-timed video blueprints with baked-in viral music tracks. Works with any product footage.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowNewTemplateModal(true)}
+              className="gap-1.5 text-xs shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Template
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {templates.map((tpl) => {
+              const isSelected = selectedTemplate?.id === tpl.id;
               return (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelectStyle(s)}
-                  className={`p-3 text-left rounded-lg border transition-all relative ${
+                <div
+                  key={tpl.id}
+                  onClick={() => handleSelectTemplate(tpl)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer relative ${
                     isSelected
-                      ? 'border-neutral-900 dark:border-white bg-neutral-100 dark:bg-neutral-800 font-medium shadow-sm'
-                      : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 text-neutral-500'
+                      ? 'border-neutral-900 bg-neutral-900/5 dark:border-white dark:bg-white/5 ring-1 ring-neutral-900 dark:ring-white shadow-md'
+                      : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 hover:border-neutral-400 dark:hover:border-neutral-700'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-mono">
-                      {s.is_custom ? 'CUSTOM' : 'STYLE'}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-sm font-bold text-neutral-900 dark:text-white truncate">
+                      {tpl.name}
                     </span>
-                    {s.is_default && (
-                      <span className="px-1.5 py-0.5 text-[9px] uppercase font-mono tracking-wider rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                        DEFAULT
-                      </span>
+                    {tpl.is_default && (
+                      <Badge variant="neutral" className="text-[10px] uppercase font-bold shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                        Default
+                      </Badge>
                     )}
                   </div>
-                  <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{s.name}</div>
-                  <div className="text-[11px] text-neutral-400 mt-1.5 flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[10px] px-1 py-0">{s.crop_mode}</Badge>
-                    {s.transitions_enabled && <Badge variant="secondary" className="text-[10px] px-1 py-0">Transitions</Badge>}
+
+                  <p className="text-xs text-neutral-500 line-clamp-2 mb-3 leading-relaxed">
+                    {tpl.description || 'Pre-configured beat cuts and layout.'}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-0.5 rounded flex items-center gap-1">
+                      <Music className="w-3 h-3 text-amber-500" />
+                      {tpl.fixed_music_track.replace('downloadsv2', 'Beat V2').replace('download', 'Track')}
+                    </span>
+                    <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-0.5 rounded flex items-center gap-1">
+                      <Film className="w-3 h-3 text-neutral-400" />
+                      {tpl.base_style_id.replace('_', ' ')}
+                    </span>
+                    <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-0.5 rounded">
+                      {tpl.crop_mode}
+                    </span>
                   </div>
-                </button>
+
+                  {tpl.is_custom && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteTemplate(tpl.id, tpl.name);
+                      }}
+                      className="absolute bottom-3 right-3 text-neutral-400 hover:text-red-500 transition-colors"
+                      title="Delete Custom Template"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
+        </div>
+      )}
 
-          {/* Form Settings & Live Visual Customizer */}
-          {selectedStyle && (
-            <Card className="space-y-5">
-              <div className="border-b border-neutral-200 dark:border-neutral-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="text-base font-semibold flex items-center gap-2">
-                    <span>{selectedStyle.name}</span>
-                    {hasUnsavedChanges && (
-                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded">
-                        Unsaved Edits
+      {/* ===================== MODE 2: UNIVERSAL MOTION STYLES ===================== */}
+      {studioMode === 'styles' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                Universal Motion Styles (Dynamic Audio Compatible)
+              </span>
+              <p className="text-xs text-neutral-400">
+                Algorithmic kinetic zooms and swishes. Compatible with rotating, diverse, or random background audio.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowNewStyleModal(true)}
+              className="gap-1.5 text-xs shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Custom Style
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {styles.map((s) => {
+              const isSelected = selectedStyle?.id === s.id;
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => handleSelectStyle(s)}
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative ${
+                    isSelected
+                      ? 'border-neutral-900 bg-neutral-900/5 dark:border-white dark:bg-white/5 ring-1 ring-neutral-900 dark:ring-white shadow-md'
+                      : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 hover:border-neutral-400 dark:hover:border-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-1 mb-1">
+                    <span className="text-xs font-bold text-neutral-900 dark:text-white truncate">{s.name}</span>
+                    {s.is_default && (
+                      <Badge variant="neutral" className="text-[9px] uppercase font-bold shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                        Default
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 mt-2">
+                    <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-1.5 py-0.5 rounded">
+                      {s.crop_mode}
+                    </span>
+                    {s.transitions_enabled && (
+                      <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-1.5 py-0.5 rounded">
+                        Transitions
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-neutral-500 mt-1">{selectedStyle.description}</div>
-                </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => selectedStyle && handleDuplicate(selectedStyle.id)}
-                    className="text-xs h-7 px-2"
-                    title="Clone as new style"
-                  >
-                    <Copy className="w-3 h-3 mr-1" /> Duplicate
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleResetStyle}
-                    className="text-xs h-7 px-2"
-                    title="Restore factory template values"
-                  >
-                    <RotateCcw className="w-3 h-3 mr-1" /> Reset Default
-                  </Button>
-                  {selectedStyle.is_custom && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleDeleteCustomStyle(selectedStyle.id, selectedStyle.name)}
-                      className="text-xs h-7 px-2 text-red-400 hover:bg-red-500/10 border-red-500/30"
-                      title="Delete this custom style"
+                  {s.is_custom && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCustomStyle(s.id, s.name);
+                      }}
+                      className="absolute bottom-2.5 right-2.5 text-neutral-400 hover:text-red-500 transition-colors"
+                      title="Delete Custom Style"
                     >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== SHARED VISUAL EDITOR & CANVAS ===================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (7 cols): Configuration & Layer Controls */}
+        <div className="lg:col-span-7 space-y-4">
+          <Card className="p-6 space-y-6 bg-white dark:bg-neutral-950 border hairline-border">
+            {/* Header with Save & Default buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-200 dark:border-neutral-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-neutral-900 dark:text-white">
+                    {studioMode === 'templates' ? selectedTemplate?.name : selectedStyle?.name}
+                  </h2>
+                  {hasUnsavedChanges && (
+                    <Badge variant="warning" className="text-[10px]">
+                      Unsaved Edits
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {studioMode === 'templates'
+                    ? selectedTemplate?.description
+                    : selectedStyle?.description || 'Universal TikTok video style with beat-cuts.'}
+                </p>
               </div>
 
-              {/* Asset Sources (Product, Music & Universal Framing Mode) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
-                    <Folder className="w-3.5 h-3.5 text-neutral-400" />
-                    Product Footage
-                  </label>
-                  <select
-                    value={selectedProductId || ''}
-                    onChange={(e) => handleProductSelect(Number(e.target.value))}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-3 py-2 text-xs text-neutral-100 focus:outline-none focus:border-neutral-600 cursor-pointer"
-                  >
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-neutral-900 text-neutral-100">
-                        {p.name} {p.clip_count ? `(${p.clip_count} clips)` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="flex items-center gap-2">
+                {studioMode === 'templates' ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={settingDefaultLoading || selectedTemplate?.is_default}
+                      onClick={handleSetDefaultTemplate}
+                      className="text-xs gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      {selectedTemplate?.is_default ? 'Active Default' : 'Set as Default Template'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={savingLoading || !hasUnsavedChanges}
+                      onClick={handleSaveTemplate}
+                      className="text-xs gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Template
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={settingDefaultLoading || selectedStyle?.is_default}
+                      onClick={handleSetDefaultStyle}
+                      className="text-xs gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      {selectedStyle?.is_default ? 'Active Default' : 'Set as Default Style'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleResetStyle}
+                      className="text-xs gap-1"
+                      title="Reset to factory values"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={savingLoading || !hasUnsavedChanges}
+                      onClick={handleSaveStyle}
+                      className="text-xs gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Changes
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
-                    <Music className="w-3.5 h-3.5 text-neutral-400" />
-                    Background Music Track
-                  </label>
+            {/* Test Product Footage & Audio Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                  <Folder className="w-3.5 h-3.5 text-neutral-400" />
+                  Product Footage for Test Cuts
+                </label>
+                <select
+                  value={selectedProductId || ''}
+                  onChange={(e) => handleProductSelect(Number(e.target.value))}
+                  className="w-full text-xs rounded-input bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-2.5 text-neutral-800 dark:text-neutral-200 focus:outline-none"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.clip_count || 0} clips)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Music Selection or Fixed Audio Pill */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                  <Music className="w-3.5 h-3.5 text-neutral-400" />
+                  Background Audio Track
+                </label>
+                {studioMode === 'templates' ? (
+                  <div className="flex items-center gap-2 p-2.5 rounded-input bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs">
+                    <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className="text-neutral-700 dark:text-neutral-300 font-medium">
+                      Fixed to: <strong>{selectedTemplate?.fixed_music_track}</strong>
+                    </span>
+                  </div>
+                ) : (
                   <select
                     value={selectedMusicTrack}
                     onChange={(e) => setSelectedMusicTrack(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-3 py-2 text-xs text-neutral-100 focus:outline-none focus:border-neutral-600 cursor-pointer"
+                    className="w-full text-xs rounded-input bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-2.5 text-neutral-800 dark:text-neutral-200 focus:outline-none"
                   >
-                    <option value="random" className="bg-neutral-900 text-neutral-100">
-                      Random Track (Automatic Beat Rotation)
-                    </option>
-                    {musicTracks.map((t) => (
-                      <option key={t.id} value={t.filename} className="bg-neutral-900 text-neutral-100">
-                        {t.name} ({t.size_kb} KB)
+                    <option value="random">Random from Library</option>
+                    {musicTracks.map((m) => (
+                      <option key={m.id} value={m.filename}>
+                        {m.name} ({m.size_kb} KB)
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
-                    <Video className="w-3.5 h-3.5 text-neutral-400" />
-                    Framing / Crop Mode
-                  </label>
-                  <select
-                    value={selectedStyle.spec?.clip_rules?.crop_mode || selectedStyle.crop_mode || 'auto'}
-                    onChange={(e) => handleCropModeChange(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-3 py-2 text-xs text-neutral-100 focus:outline-none focus:border-neutral-600 cursor-pointer"
-                  >
-                    <option value="auto" className="bg-neutral-900 text-neutral-100">
-                      Auto (Smart Ambient Glow for Landscape, Full Bleed for Vertical)
-                    </option>
-                    <option value="contain_blur" className="bg-neutral-900 text-neutral-100">
-                      Contain Blur (Ambient Glow Backdrop)
-                    </option>
-                    <option value="cover" className="bg-neutral-900 text-neutral-100">
-                      Full Bleed Cover (Classic Zoom Crop)
-                    </option>
-                  </select>
-                </div>
+                )}
               </div>
+            </div>
 
-              {/* Sample Hook Texts */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-500">Preview Title (Line 1 Hook)</label>
+            {/* Framing & Crop Mode */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                <Film className="w-3.5 h-3.5 text-neutral-400" />
+                Framing & Crop Mode
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'auto', label: 'Auto (Universal Smart)', desc: 'Detects vertical/horizontal automatically' },
+                  { id: 'contain_blur', label: 'Contain Blur (Ambient Glow)', desc: 'Fit clip with blurred backdrop' },
+                  { id: 'cover', label: 'Cover (Full Bleed)', desc: 'Center crop to full 1080x1920' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleCropModeChange(m.id)}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      activeCropMode === m.id
+                        ? 'border-neutral-900 dark:border-white bg-neutral-100 dark:bg-neutral-900 font-medium'
+                        : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 text-neutral-500'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-neutral-900 dark:text-white">{m.label}</div>
+                    <div className="text-[10px] text-neutral-400 mt-0.5">{m.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Typography & Hook Editor */}
+            <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-800">
+              <span className="text-xs uppercase tracking-wider text-neutral-500 font-bold block">
+                Typography, Colors & Overlay Layout
+              </span>
+
+              {/* Hook text inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    Title Hook (Line 1)
+                  </label>
                   <Input
                     value={titleText}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitleText(e.target.value)}
-                    placeholder="Line 1 Hook"
+                    onChange={(e) => setTitleText(e.target.value)}
+                    placeholder="e.g. INPLAY BK680"
+                    className="text-xs"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-500">Preview Subtitle (Line 2 Subhook)</label>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    Subtitle Hook (Line 2)
+                  </label>
                   <Input
                     value={subtitleText}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSubtitleText(e.target.value)}
-                    placeholder="Line 2 Detail"
+                    onChange={(e) => setSubtitleText(e.target.value)}
+                    placeholder="e.g. LIMITED TIME CREATOR DEAL"
+                    className="text-xs"
                   />
                 </div>
               </div>
 
-              {/* Visual Typography Customizer & Sliders */}
-              <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-4">
+              {/* Title Layer Controls */}
+              <div className="p-4 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-neutral-300">
-                    Typography, Colors & Position Editor:
+                  <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
+                    TITLE / MAIN HOOK LAYER
                   </span>
-                  <span className="text-[11px] text-neutral-500">
-                    Tip: You can also drag text directly on the phone canvas!
+                  <span className="font-mono text-[10px] text-neutral-400">
+                    Y: {activeTitleY}px | Size: {activeTitleSize}px
                   </span>
                 </div>
 
-                {/* Title Layer Editor */}
-                {titleLayer && (
-                  <div className="p-3.5 rounded-lg border border-neutral-800 bg-neutral-900/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-neutral-200 uppercase tracking-wider">
-                        Title / Main Hook Layer
-                      </span>
-                      <span className="text-[11px] font-mono text-neutral-400">
-                        Y: {titleLayer.position_y}px | Size: {titleLayer.max_size}px
-                      </span>
-                    </div>
-
-                    {/* Color selection */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] text-neutral-400">Color Palette</label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {PRESET_COLORS.map((c) => {
-                          const isActive = normalizeHexColor(titleLayer.color).toLowerCase() === c.hex.toLowerCase();
-                          return (
-                            <button
-                              key={c.hex}
-                              onClick={() => handleUpdateLayer('title', { color: formatColorForFFmpeg(c.hex) })}
-                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border transition ${
-                                isActive ? 'border-white bg-neutral-800 text-white font-medium' : 'border-neutral-800 text-neutral-400 hover:border-neutral-600'
-                              }`}
-                            >
-                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.hex }} />
-                              {c.name}
-                            </button>
-                          );
-                        })}
-                        <div className="flex items-center gap-1 ml-auto">
-                          <input
-                            type="color"
-                            value={normalizeHexColor(titleLayer.color)}
-                            onChange={(e) => handleUpdateLayer('title', { color: formatColorForFFmpeg(e.target.value) })}
-                            className="w-6 h-6 rounded border-0 bg-transparent cursor-pointer"
-                            title="Custom Color Picker"
-                          />
-                          <span className="font-mono text-xs text-neutral-400">
-                            {normalizeHexColor(titleLayer.color).toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Font size & Vertical Position Sliders */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px] text-neutral-400">
-                          <span>Max Font Size</span>
-                          <span className="font-mono">{titleLayer.max_size}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="60"
-                          max="160"
-                          step="2"
-                          value={titleLayer.max_size}
-                          onChange={(e) => handleUpdateLayer('title', { max_size: Number(e.target.value) })}
-                          className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px] text-neutral-400">
-                          <span>Vertical Position (Y)</span>
-                          <span className="font-mono">{titleLayer.position_y}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="120"
-                          max="1600"
-                          step="10"
-                          value={titleLayer.position_y}
-                          onChange={(e) => handleUpdateLayer('title', { position_y: Number(e.target.value) })}
-                          className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
+                {/* Color Palette */}
+                <div className="space-y-1">
+                  <span className="text-[11px] text-neutral-400">Color Palette:</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => {
+                          if (studioMode === 'templates') {
+                            handleUpdateTemplateProperty('title_color', c.hex);
+                          } else {
+                            handleUpdateStyleLayer('title', { color: formatColorForFFmpeg(c.hex) });
+                          }
+                        }}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all ${
+                          normalizeHexColor(activeTitleColor).toUpperCase() === c.hex.toUpperCase()
+                            ? 'ring-2 ring-neutral-900 dark:ring-white font-semibold bg-neutral-200 dark:bg-neutral-800'
+                            : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200/80 text-neutral-600 dark:text-neutral-300'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
+                        {c.name}
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1 font-mono text-[11px] text-neutral-500 ml-auto">
+                      <span>{normalizeHexColor(activeTitleColor)}</span>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {/* Subtitle / Caption Layer Editor */}
-                {secondaryLayer && (
-                  <div className="p-3.5 rounded-lg border border-neutral-800 bg-neutral-900/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-neutral-200 uppercase tracking-wider">
-                        {secondaryLayerName === 'subtitle' ? 'Subtitle / Line 2 Subhook' : 'Clip Caption Layer'}
-                      </span>
-                      <span className="text-[11px] font-mono text-neutral-400">
-                        Y: {secondaryLayer.position_y}px | Size: {secondaryLayer.max_size}px
-                      </span>
+                {/* Sliders */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-500">
+                      <span>Max Font Size</span>
+                      <span className="font-mono">{activeTitleSize}px</span>
                     </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] text-neutral-400">Color Palette</label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {PRESET_COLORS.map((c) => {
-                          const isActive = normalizeHexColor(secondaryLayer.color).toLowerCase() === c.hex.toLowerCase();
-                          return (
-                            <button
-                              key={c.hex}
-                              onClick={() => handleUpdateLayer(secondaryLayerName, { color: formatColorForFFmpeg(c.hex) })}
-                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border transition ${
-                                isActive ? 'border-white bg-neutral-800 text-white font-medium' : 'border-neutral-800 text-neutral-400 hover:border-neutral-600'
-                              }`}
-                            >
-                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.hex }} />
-                              {c.name}
-                            </button>
-                          );
-                        })}
-                        <div className="flex items-center gap-1 ml-auto">
-                          <input
-                            type="color"
-                            value={normalizeHexColor(secondaryLayer.color)}
-                            onChange={(e) => handleUpdateLayer(secondaryLayerName, { color: formatColorForFFmpeg(e.target.value) })}
-                            className="w-6 h-6 rounded border-0 bg-transparent cursor-pointer"
-                          />
-                          <span className="font-mono text-xs text-neutral-400">
-                            {normalizeHexColor(secondaryLayer.color).toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px] text-neutral-400">
-                          <span>Max Font Size</span>
-                          <span className="font-mono">{secondaryLayer.max_size}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="40"
-                          max="140"
-                          step="2"
-                          value={secondaryLayer.max_size}
-                          onChange={(e) => handleUpdateLayer(secondaryLayerName, { max_size: Number(e.target.value) })}
-                          className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px] text-neutral-400">
-                          <span>Vertical Position (Y)</span>
-                          <span className="font-mono">{secondaryLayer.position_y}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="150"
-                          max="1750"
-                          step="10"
-                          value={secondaryLayer.position_y}
-                          onChange={(e) => handleUpdateLayer(secondaryLayerName, { position_y: Number(e.target.value) })}
-                          className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Pro Transitions & Motion Engine */}
-                <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-neutral-400" /> Professional Motion & Transitions
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-mono capitalize">
-                      {selectedStyle.cut_mode.replace('_', ' ')}
-                    </Badge>
+                    <input
+                      type="range"
+                      min="70"
+                      max="170"
+                      value={activeTitleSize}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (studioMode === 'templates') {
+                          handleUpdateTemplateProperty('title_font_size', val);
+                        } else {
+                          handleUpdateStyleLayer('title', { max_size: val });
+                        }
+                      }}
+                      className="w-full accent-neutral-900 dark:accent-white"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-3 rounded border border-neutral-800 bg-neutral-900/40 space-y-1">
-                      <div className="text-[11px] font-medium text-neutral-400">Camera Motion Sequence</div>
-                      <div className="text-xs font-semibold text-neutral-200">
-                        {selectedStyle.id === 'punchy_zoom'
-                          ? 'Explosive Snap Punch (1.28x) + Whip Pans & Macro Zoom'
-                          : selectedStyle.id === 'smooth_flow'
-                          ? '4-Way Continuous Luxury Gimbal Drift (Zoom + Pan L/R)'
-                          : selectedStyle.id === 'clean_showcase'
-                          ? 'Ambient Blur Backdrop + Slow Float'
-                          : 'High-Conversion Slide + CTA Pop'}
-                      </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-500">
+                      <span>Vertical Position (Y)</span>
+                      <span className="font-mono">{activeTitleY}px</span>
                     </div>
-
-                    <div className="p-3 rounded border border-neutral-800 bg-neutral-900/40 space-y-1">
-                      <div className="text-[11px] font-medium text-neutral-400">Cut Transition Effect</div>
-                      <div className="text-xs font-semibold text-neutral-200">
-                        {selectedStyle.id === 'punchy_zoom'
-                          ? 'Kinetic Beat Snap & Seamless Directional Swish (Clean, Flash-Free)'
-                          : selectedStyle.id === 'smooth_flow'
-                          ? 'Silky Soft Dissolve & Seamless Crossfade'
-                          : selectedStyle.id === 'clean_showcase'
-                          ? 'Soft Crossfade with Blurred Frame Fill'
-                          : 'Dynamic Slide In with Highlight Accent'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rhythm & Pacing */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
-                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
-                      <span className="text-neutral-500 block">Cut Timing</span>
-                      <span className="font-semibold text-neutral-200">
-                        {selectedStyle.id === 'punchy_zoom' ? 'Fast (1.3s – 2 Beats)' : selectedStyle.id === 'smooth_flow' ? 'Melodic (2.6s – 4 Beats)' : '2.2s Beat-Synced'}
-                      </span>
-                    </div>
-                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800">
-                      <span className="text-neutral-500 block">Audio Beat Lock</span>
-                      <span className="font-semibold text-emerald-400">100% Transient Synced</span>
-                    </div>
-                    <div className="p-2 rounded bg-neutral-900/60 border border-neutral-800 col-span-2 sm:col-span-1">
-                      <span className="text-neutral-500 block">Canvas</span>
-                      <span className="font-semibold text-neutral-200 font-mono">1080x1920 (30fps)</span>
-                    </div>
+                    <input
+                      type="range"
+                      min="80"
+                      max="1400"
+                      value={activeTitleY}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (studioMode === 'templates') {
+                          handleUpdateTemplateProperty('title_y', val);
+                        } else {
+                          handleUpdateStyleLayer('title', { position_y: val });
+                        }
+                      }}
+                      className="w-full accent-neutral-900 dark:accent-white"
+                    />
                   </div>
                 </div>
               </div>
-            </Card>
-          )}
+
+              {/* Subtitle Layer Controls */}
+              <div className="p-4 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
+                    SUBTITLE / CALLOUT LAYER
+                  </span>
+                  <span className="font-mono text-[10px] text-neutral-400">
+                    Y: {activeSubtitleY}px | Size: {activeSubtitleSize}px
+                  </span>
+                </div>
+
+                {/* Color Palette */}
+                <div className="space-y-1">
+                  <span className="text-[11px] text-neutral-400">Color Palette:</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => {
+                          if (studioMode === 'templates') {
+                            handleUpdateTemplateProperty('subtitle_color', c.hex);
+                          } else {
+                            handleUpdateStyleLayer('subtitle', { color: formatColorForFFmpeg(c.hex) });
+                          }
+                        }}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all ${
+                          normalizeHexColor(activeSubtitleColor).toUpperCase() === c.hex.toUpperCase()
+                            ? 'ring-2 ring-neutral-900 dark:ring-white font-semibold bg-neutral-200 dark:bg-neutral-800'
+                            : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200/80 text-neutral-600 dark:text-neutral-300'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sliders */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-500">
+                      <span>Max Font Size</span>
+                      <span className="font-mono">{activeSubtitleSize}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="40"
+                      max="120"
+                      value={activeSubtitleSize}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (studioMode === 'templates') {
+                          handleUpdateTemplateProperty('subtitle_font_size', val);
+                        } else {
+                          handleUpdateStyleLayer('subtitle', { max_size: val });
+                        }
+                      }}
+                      className="w-full accent-neutral-900 dark:accent-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-500">
+                      <span>Vertical Position (Y)</span>
+                      <span className="font-mono">{activeSubtitleY}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="150"
+                      max="1600"
+                      value={activeSubtitleY}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (studioMode === 'templates') {
+                          handleUpdateTemplateProperty('subtitle_y', val);
+                        } else {
+                          handleUpdateStyleLayer('subtitle', { position_y: val });
+                        }
+                      }}
+                      className="w-full accent-neutral-900 dark:accent-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
 
-        {/* Right: Phone-shaped 9:16 Interactive Preview Canvas */}
-        <div className="lg:col-span-5 flex flex-col items-center">
-          <div
-            ref={phoneCanvasRef}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            className="relative w-[280px] h-[498px] rounded-[36px] border-4 border-neutral-800 bg-black overflow-hidden shadow-2xl flex flex-col justify-between p-4 text-center select-none"
-          >
-            {/* Phone notch */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-24 h-4 bg-neutral-800 rounded-full z-20 pointer-events-none"></div>
+        {/* Right Column (5 cols): Interactive 9:16 Mobile Phone Canvas */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card className="p-6 bg-white dark:bg-neutral-950 border hairline-border flex flex-col items-center">
+            <div className="w-full flex items-center justify-between mb-4">
+              <span className="text-xs uppercase tracking-wider text-neutral-500 font-bold">
+                9:16 Live Canvas Preview
+              </span>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={previewLoading}
+                onClick={handlePreviewRender}
+                className="text-xs gap-1.5 bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold shadow-sm"
+              >
+                {previewLoading ? (
+                  <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 ml-0.5" />
+                )}
+                {previewLoading ? 'Rendering 5s Preview...' : 'Preview Render (5s)'}
+              </Button>
+            </div>
 
-            {/* Rendering Progress Animation Overlay */}
-            {previewLoading && (
-              <div className="absolute inset-0 bg-neutral-950/95 z-40 flex flex-col items-center justify-center p-6 text-center select-none backdrop-blur-sm animate-fadeIn">
-                <div className="relative mb-5">
-                  <div className="w-16 h-16 rounded-full border-2 border-neutral-800 border-t-white animate-spin"></div>
-                  <Video className="w-6 h-6 text-white absolute inset-0 m-auto animate-pulse" />
-                </div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-white">Rendering FFmpeg Preview</div>
-                <div className="text-[11px] text-neutral-400 mt-2 max-w-[200px] leading-relaxed">
-                  Slicing vertical clips, detecting audio beats & burning typography...
-                </div>
-                <div className="w-36 h-1 bg-neutral-800 rounded-full mt-4 overflow-hidden">
-                  <div className="w-full h-full bg-gradient-to-r from-neutral-600 via-white to-neutral-600 animate-pulse"></div>
-                </div>
-              </div>
-            )}
+            {/* Mobile Phone Mockup Frame */}
+            <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-[38px] p-2 bg-neutral-900 dark:bg-neutral-950 shadow-2xl border-4 border-neutral-800">
+              <div
+                ref={phoneCanvasRef}
+                className="relative w-full h-full rounded-[30px] overflow-hidden bg-neutral-900 flex flex-col items-center justify-start select-none"
+              >
+                {/* Phone Speaker Notch */}
+                <div className="absolute top-2 w-20 h-4 bg-neutral-950 rounded-full z-30" />
 
-            {/* Video preview / Interactive simulated canvas */}
-            {previewUrl ? (
-              <div className="absolute inset-0 bg-black flex items-center justify-center">
-                <video
-                  key={previewUrl}
-                  src={previewUrl}
-                  autoPlay
-                  loop
-                  controls
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <>
-                <div className="absolute inset-0 bg-gradient-to-b from-neutral-900 via-neutral-950 to-neutral-900 opacity-90 flex flex-col items-center justify-center pointer-events-none">
-                  <Video className="h-10 w-10 text-neutral-600 mb-2" />
-                  <span className="text-[11px] text-neutral-500 font-mono">Live 9:16 Canvas</span>
-                </div>
-
-                {/* Draggable Title Layer */}
-                <div
-                  onMouseDown={() => setDraggingLayer('title')}
-                  style={{
-                    position: 'absolute',
-                    top: `${((titleLayer?.position_y || 240) / 1920) * 100}%`,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '90%',
-                    cursor: 'grab',
-                  }}
-                  className={`group select-none transition-shadow rounded p-1 ${
-                    draggingLayer === 'title' ? 'ring-1 ring-white bg-white/10' : 'hover:ring-1 hover:ring-neutral-600'
-                  }`}
-                  title="Click and drag up or down to reposition"
-                >
-                  <div
-                    className="font-bold tracking-tight text-center drop-shadow-md leading-tight"
-                    style={{
-                      fontFamily: 'Impact, Anton, sans-serif',
-                      color: normalizeHexColor(titleLayer?.color || '#EFD34C'),
-                      fontSize: `${Math.round(((titleLayer?.max_size || 120) / 1080) * 280)}px`,
-                      WebkitTextStroke: '1px black',
-                    }}
-                  >
-                    {titleText}
+                {/* Video Render Output if available */}
+                {previewUrl ? (
+                  <video
+                    key={previewUrl}
+                    src={previewUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="w-full h-full object-cover z-10"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-neutral-500 space-y-2">
+                    <Video className="w-8 h-8 opacity-40" />
+                    <span className="text-xs font-medium">Live 9:16 Canvas</span>
+                    <span className="text-[10px] text-neutral-600">
+                      Drag text layers or click Preview Render to see 5-second dynamic cuts.
+                    </span>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition text-[9px] text-neutral-400 font-mono mt-0.5 flex items-center justify-center gap-1">
-                    <Move className="w-2.5 h-2.5" /> Drag Y: {titleLayer?.position_y}px
-                  </div>
-                </div>
+                )}
 
-                {/* Draggable Subtitle / Caption Layer */}
-                {secondaryLayer && (
-                  <div
-                    onMouseDown={() => setDraggingLayer(secondaryLayerName)}
-                    style={{
-                      position: 'absolute',
-                      top: `${(((secondaryLayer?.position_y || 380) / 1920) * 100)}%`,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '90%',
-                      cursor: 'grab',
-                    }}
-                    className={`group select-none transition-shadow rounded p-1 ${
-                      draggingLayer === secondaryLayerName ? 'ring-1 ring-white bg-white/10' : 'hover:ring-1 hover:ring-neutral-600'
-                    }`}
-                    title="Click and drag up or down to reposition"
-                  >
+                {/* Interactive Drag Text Layers (Displayed on canvas when no video is playing) */}
+                {!previewUrl && (
+                  <>
+                    {/* Title Layer */}
                     <div
-                      className="font-bold tracking-tight text-center drop-shadow-md text-white leading-tight"
+                      onMouseDown={(e) => handleMouseDown('title', e)}
                       style={{
-                        fontFamily: 'Impact, Anton, sans-serif',
-                        color: normalizeHexColor(secondaryLayer?.color || '#FFFFFF'),
-                        fontSize: `${Math.round((((secondaryLayer?.max_size || 90) / 1080) * 280))}px`,
-                        WebkitTextStroke: '1px black',
+                        top: `${(activeTitleY / 1920) * 100}%`,
+                        color: normalizeHexColor(activeTitleColor),
+                        fontSize: `${Math.round((activeTitleSize / 1920) * 440)}px`,
                       }}
+                      className="absolute w-[86%] text-center font-bold tracking-tight uppercase cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20"
+                    >
+                      {titleText}
+                    </div>
+
+                    {/* Subtitle Layer */}
+                    <div
+                      onMouseDown={(e) => handleMouseDown('subtitle', e)}
+                      style={{
+                        top: `${(activeSubtitleY / 1920) * 100}%`,
+                        color: normalizeHexColor(activeSubtitleColor),
+                        fontSize: `${Math.round((activeSubtitleSize / 1920) * 440)}px`,
+                      }}
+                      className="absolute w-[86%] text-center font-bold uppercase tracking-tight cursor-move hover:outline hover:outline-dashed hover:outline-amber-400 rounded px-1 transition-all z-20"
                     >
                       {subtitleText}
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition text-[9px] text-neutral-400 font-mono mt-0.5 flex items-center justify-center gap-1">
-                      <Move className="w-2.5 h-2.5" /> Drag Y: {secondaryLayer?.position_y}px
-                    </div>
-                  </div>
+                  </>
                 )}
+              </div>
+            </div>
 
-                {/* Bottom CTA Layer (if present in style) */}
-                {ctaLayer && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: `${((ctaLayer.position_y || 1600) / 1920) * 100}%`,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                    }}
-                    className="z-10 select-none"
-                  >
-                    <div className="inline-block px-3 py-1 bg-red-600 text-white font-bold text-[10px] rounded uppercase tracking-wider border border-yellow-400 shadow">
-                      Tap Basket to Order
-                    </div>
-                  </div>
-                )}
-
-                {/* Bottom Safe Area guide */}
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[9px] text-neutral-500 font-mono pointer-events-none">
-                  Safe Area 1080x1920
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="text-xs text-neutral-500 mt-3 text-center space-y-2">
-            <div>
-              {previewUrl ? (
-                <div className="flex items-center gap-2 justify-center">
-                  <Button variant="secondary" size="sm" onClick={() => setPreviewUrl(null)} className="text-xs">
-                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> Edit Layout & Layers
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handlePreviewRender} disabled={previewLoading} className="text-xs">
-                    <Play className="w-3.5 h-3.5 mr-1" /> Re-Render Preview
-                  </Button>
-                </div>
-              ) : (
-                <span>Drag text on canvas or use sliders, then click <strong>Preview Render</strong>.</span>
+            {/* Quick Actions underneath phone */}
+            <div className="w-full mt-4 flex items-center justify-between text-xs text-neutral-500">
+              <span className="text-[11px]">Safe Area: 1080x1920</span>
+              {previewUrl && (
+                <button
+                  onClick={() => setPreviewUrl(null)}
+                  className="text-xs text-amber-500 hover:underline flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" /> Edit Layout & Layers
+                </button>
               )}
             </div>
-          </div>
+          </Card>
         </div>
       </div>
 
-      {/* New Custom Style Modal */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <Card className="relative w-full max-w-md bg-neutral-900 border-neutral-800 p-5 space-y-4 text-white">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <h3 className="font-semibold text-base flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Create New Custom Style
+      {/* Modal: New Template */}
+      {showNewTemplateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-6 space-y-4 shadow-2xl text-white">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                New CapCut-Style Template
               </h3>
               <button
-                onClick={() => setShowNewModal(false)}
-                className="w-7 h-7 rounded-full bg-neutral-800 flex items-center justify-center hover:bg-neutral-700"
+                onClick={() => setShowNewTemplateModal(false)}
+                className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center"
               >
                 <X className="w-4 h-4 text-neutral-400" />
               </button>
             </div>
+            <p className="text-xs text-neutral-400">
+              Create a viral format preset with a locked audio track and layout.
+            </p>
 
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400">Style Name</label>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Template Name</label>
                 <Input
-                  value={newStyleName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewStyleName(e.target.value)}
-                  placeholder="e.g. Neon Yellow Punch"
+                  value={newTplName}
+                  onChange={(e) => setNewTplName(e.target.value)}
+                  placeholder="e.g. Flash Deal Drop"
+                  className="bg-neutral-800 border-neutral-700 text-xs text-white"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400">Base Template to Copy</label>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Fixed Background Music Track</label>
                 <select
-                  value={newStyleBase}
-                  onChange={(e) => setNewStyleBase(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-3 py-2 text-xs text-neutral-100 focus:outline-none cursor-pointer"
+                  value={newTplMusic}
+                  onChange={(e) => setNewTplMusic(e.target.value)}
+                  className="w-full text-xs rounded-input bg-neutral-800 border border-neutral-700 p-2.5 text-white focus:outline-none"
                 >
-                  <option value="punchy_zoom">Punchy Zoom (Fast cuts + zoom punches)</option>
-                  <option value="smooth_flow">Smooth Flow (Soft dissolves + slow drift)</option>
-                  <option value="classic_hook">Classic Hook (High-converting yellow Anton)</option>
-                  <option value="clean_showcase">Clean Showcase (Blurred background fill)</option>
-                  <option value="promo_pop">Promo Pop (CTA banner + slide transitions)</option>
+                  {musicTracks.map((m) => (
+                    <option key={m.id} value={m.filename}>
+                      {m.name} ({m.size_kb} KB)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Base Motion Style</label>
+                <select
+                  value={newTplBase}
+                  onChange={(e) => setNewTplBase(e.target.value)}
+                  className="w-full text-xs rounded-input bg-neutral-800 border border-neutral-700 p-2.5 text-white focus:outline-none"
+                >
+                  <option value="punchy_zoom">Punchy Zoom (High Energy Beats)</option>
+                  <option value="smooth_flow">Smooth Flow (Aesthetic Ambient)</option>
+                  <option value="promo_pop">Promo Pop (Flash Discount Focus)</option>
+                  <option value="classic_hook">Classic Hook (High-Conversion Pitch)</option>
+                  <option value="clean_showcase">Clean Showcase (Minimal Modern)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Framing Mode</label>
+                <select
+                  value={newTplCrop}
+                  onChange={(e) => setNewTplCrop(e.target.value)}
+                  className="w-full text-xs rounded-input bg-neutral-800 border border-neutral-700 p-2.5 text-white focus:outline-none"
+                >
+                  <option value="auto">Auto (Smart Horizontal/Vertical)</option>
+                  <option value="contain_blur">Contain Blur (Ambient Backdrop)</option>
+                  <option value="cover">Cover (Full Bleed Center Crop)</option>
                 </select>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-800">
-              <Button variant="secondary" size="sm" onClick={() => setShowNewModal(false)}>
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowNewTemplateModal(false)}
+                className="text-xs"
+              >
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={handleCreateCustomStyle} disabled={!newStyleName.trim()}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleCreateTemplate}
+                className="text-xs bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+              >
+                Create Template
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: New Custom Style */}
+      {showNewStyleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-6 space-y-4 shadow-2xl text-white">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold flex items-center gap-1.5">
+                <Plus className="w-4 h-4" />
+                New Custom Style
+              </h3>
+              <button
+                onClick={() => setShowNewStyleModal(false)}
+                className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center"
+              >
+                <X className="w-4 h-4 text-neutral-400" />
+              </button>
+            </div>
+            <p className="text-xs text-neutral-400">
+              Duplicate an existing style blueprint to build a customized variant.
+            </p>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Style Name</label>
+                <Input
+                  value={newStyleName}
+                  onChange={(e) => setNewStyleName(e.target.value)}
+                  placeholder="e.g. Neon Cyber Zoom"
+                  className="bg-neutral-800 border-neutral-700 text-xs text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-neutral-300">Base Motion Style</label>
+                <select
+                  value={newStyleBase}
+                  onChange={(e) => setNewStyleBase(e.target.value)}
+                  className="w-full text-xs rounded-input bg-neutral-800 border border-neutral-700 p-2.5 text-white focus:outline-none"
+                >
+                  <option value="punchy_zoom">Punchy Zoom</option>
+                  <option value="smooth_flow">Smooth Flow</option>
+                  <option value="promo_pop">Promo Pop</option>
+                  <option value="classic_hook">Classic Hook</option>
+                  <option value="clean_showcase">Clean Showcase</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowNewStyleModal(false)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleCreateCustomStyle}
+                className="text-xs bg-white text-black font-semibold"
+              >
                 Create Style
               </Button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
     </div>

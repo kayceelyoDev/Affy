@@ -101,15 +101,17 @@ def compile_text_filters(
             t_file = workdir / f"t_{i}.txt"
             t_file.write_text(text_val, encoding="utf-8")
             
-            color = title_layer.color if i == 0 else (sub_layer.color if sub_layer else "white")
+            raw_color = title_layer.color if i == 0 else (sub_layer.color if sub_layer else "white")
+            color = raw_color.replace("#", "0x") if raw_color.startswith("#") else raw_color
             alpha_expr = ""
-            anim = title_layer.animation or ("pop_in" if spec.id in ("punchy_zoom", "punchy") else ("fade_out_2s" if spec.id in ("smooth_flow", "smooth") else "none"))
+            anim = title_layer.animation or "none"
             if anim == "fade_out_2s":
                 alpha_expr = ":alpha='if(lt(t,2.2),min(t/0.30,1),max(0,1-(t-2.2)/0.4))'"
             elif anim == "fade_in":
                 alpha_expr = ":alpha='min(t/0.30,1)'"
-            elif anim == "pop_in":
-                alpha_expr = ":alpha='if(lt(t,0.06),0,1)'"
+            else:
+                # Text stays persistently visible until the end of the video without blinking on clip cuts
+                alpha_expr = ""
                 
             box_expr = ""
             if title_layer.box:
